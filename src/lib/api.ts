@@ -11,6 +11,7 @@ export interface ServerData {
   rows: StatRow[];
   events: TrinityEvent[];
   transactions: Transaction[];
+  settings: Record<string, unknown>;
 }
 
 export async function fetchServerData(): Promise<ServerData | null> {
@@ -19,7 +20,12 @@ export async function fetchServerData(): Promise<ServerData | null> {
     if (!res.ok) return null;
     const json = await res.json();
     if (!json?.configured) return null;
-    return { rows: json.rows ?? [], events: json.events ?? [], transactions: json.transactions ?? [] };
+    return {
+      rows: json.rows ?? [],
+      events: json.events ?? [],
+      transactions: json.transactions ?? [],
+      settings: json.settings ?? {},
+    };
   } catch {
     return null;
   }
@@ -83,6 +89,16 @@ export async function serverUpdateEvent(ev: TrinityEvent): Promise<boolean> {
 
 export async function serverDeleteEvent(id: string): Promise<boolean> {
   return ok(fetch(`/api/events/${encodeURIComponent(id)}`, { method: "DELETE" }));
+}
+
+export async function serverSaveSetting(key: string, value: unknown): Promise<boolean> {
+  return ok(
+    fetch("/api/settings", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ key, value }),
+    }),
+  );
 }
 
 export async function serverReset(): Promise<boolean> {

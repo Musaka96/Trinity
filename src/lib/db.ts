@@ -137,6 +137,11 @@ async function initSchema() {
       earnings double precision NOT NULL
     )`;
   await sql`CREATE INDEX IF NOT EXISTS transactions_date_idx ON transactions (date)`;
+  await sql`
+    CREATE TABLE IF NOT EXISTS settings (
+      key text PRIMARY KEY,
+      value jsonb NOT NULL
+    )`;
   const [{ count }] = await sql`SELECT count(*)::int AS count FROM stat_rows`;
   if (count === 0 && seed.rows.length) await insertRows(seed.rows);
 }
@@ -160,19 +165,33 @@ export async function getDataset(): Promise<{
   rows: StatRow[];
   events: TrinityEvent[];
   transactions: Transaction[];
+  settings: Record<string, unknown>;
 }> {
   await ensureSchema();
   const sql = getSql();
-  const [rows, events, txns] = await Promise.all([
+  const [rows, events, txns, settingsRows] = await Promise.all([
     sql`SELECT * FROM stat_rows ORDER BY date`,
     sql`SELECT * FROM events ORDER BY date DESC`,
     sql`SELECT * FROM transactions ORDER BY datetime DESC`,
+    sql`SELECT key, value FROM settings`,
   ]);
+  const settings: Record<string, unknown> = {};
+  for (const s of settingsRows) settings[s.key] = s.value;
   return {
     rows: rows.map(fromDb),
     events: events.map(eventFromDb),
     transactions: txns.map(txnFromDb),
+    settings,
   };
+}
+
+export async function saveSetting(key: string, value: unknown): Promise<void> {
+  await ensureSchema();
+  const sql = getSql();
+  await sql`
+    INSERT INTO settings (key, value) VALUES (${key}, ${JSON.stringify(value)}::jsonb)
+    ON CONFLICT (key) DO UPDATE SET value = excluded.value
+  `;
 }
 
 async function insertTxns(txns: Transaction[]) {

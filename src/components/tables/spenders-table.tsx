@@ -8,6 +8,8 @@ import { DataTable } from "@/components/data-table";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { SpenderRow } from "@/lib/transactions";
+import { SpendTier, tierFor } from "@/lib/tiers";
+import { TierBadge } from "@/components/tier-badge";
 import { formatCurrency, formatNumber } from "@/lib/utils";
 
 function fmtWhen(iso: string) {
@@ -20,7 +22,7 @@ function fmtWhen(iso: string) {
   });
 }
 
-const columns: ColumnDef<SpenderRow, unknown>[] = [
+const makeColumns = (tiers: SpendTier[]): ColumnDef<SpenderRow, unknown>[] => [
   {
     accessorKey: "fanName",
     header: "Fan",
@@ -42,6 +44,12 @@ const columns: ColumnDef<SpenderRow, unknown>[] = [
     cell: ({ row }) => (
       <span className="font-medium tabular text-primary">{formatCurrency(row.original.total)}</span>
     ),
+  },
+  {
+    id: "tier",
+    header: "Tag",
+    accessorFn: (r) => tierFor(r.total, tiers)?.label ?? "",
+    cell: ({ row }) => <TierBadge tier={tierFor(row.original.total, tiers)} />,
   },
   {
     accessorKey: "count",
@@ -79,7 +87,8 @@ const columns: ColumnDef<SpenderRow, unknown>[] = [
   },
 ];
 
-export function SpendersTable({ data }: { data: SpenderRow[] }) {
+export function SpendersTable({ data, tiers }: { data: SpenderRow[]; tiers: SpendTier[] }) {
+  const columns = React.useMemo(() => makeColumns(tiers), [tiers]);
   return (
     <DataTable
       columns={columns}

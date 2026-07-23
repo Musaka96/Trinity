@@ -6,7 +6,8 @@ import { Chatter, Dataset, Model, StatRow, Transaction } from "./types";
 import { deriveChatters, deriveModels, emptyDataset, importDiff, mergeDataset } from "./dataset";
 import { TrinityEvent } from "./events";
 import { generateDemoTransactions } from "./demo-transactions";
-import { EVENTS_KEY, IMPORTS_KEY, TXNS_KEY, clear, load, save } from "./persistence";
+import { DEFAULT_TIERS, SpendTier } from "./tiers";
+import { EVENTS_KEY, IMPORTS_KEY, TIERS_KEY, TXNS_KEY, clear, load, save } from "./persistence";
 import {
   fetchServerData,
   serverCreateEvent,
@@ -14,8 +15,11 @@ import {
   serverImport,
   serverImportTransactions,
   serverReset,
+  serverSaveSetting,
   serverUpdateEvent,
 } from "./api";
+
+const TIERS_SETTING = "spend_tiers";
 
 const seed = seedJson as unknown as Dataset;
 
@@ -51,6 +55,10 @@ interface StoreValue {
   isDemoTransactions: boolean;
   importTransactions: (txns: Transaction[]) => Promise<{ added: number; updated: number; dates: string[] }>;
 
+  /** User-configurable spend tiers used to tag fans. */
+  spendTiers: SpendTier[];
+  setSpendTiers: (tiers: SpendTier[]) => Promise<void>;
+
   importRows: (rows: StatRow[]) => Promise<{ added: number; updated: number; dates: string[] }>;
   resetImports: () => Promise<void>;
 
@@ -78,12 +86,14 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     rows: StatRow[];
     events: TrinityEvent[];
     transactions: Transaction[];
-  }>({ rows: seed.rows, events: [], transactions: [] });
+    settings: Record<string, unknown>;
+  }>({ rows: seed.rows, events: [], transactions: [], settings: {} });
 
   // Local fallback (browser persistence).
   const [imports, setImports] = React.useState<Dataset>(emptyDataset());
   const [localEvents, setLocalEvents] = React.useState<TrinityEvent[]>([]);
   const [localTxns, setLocalTxns] = React.useState<Transaction[]>([]);
+  const [localTiers, setLocalTiers] = React.useState<SpendTier[]>(DEFAULT_TIERS);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -97,6 +107,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         setImports(load<Dataset>(IMPORTS_KEY, emptyDataset()));
         setLocalEvents(load<TrinityEvent[]>(EVENTS_KEY, []));
         setLocalTxns(load<Transaction[]>(TXNS_KEY, []));
+        setLocalTiers(load<SpendTier[]>(TIERS_KEY, DEFAULT_TIERS));
         setMode("local");
       }
       setReady(true);
@@ -163,6 +174,15 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     [transactions, range],
   );
 
+  // ---- Spend tiers --------------------------------------------------------
+  const spendTiers = React.useMemo<SpendTier[]>(() => {
+    if (isServer) {
+      const fromServer = server.settings?.[TIERS_SETTING];
+      return Array.isArray(fromServer) && fromServer.length ? (fromServer as SpendTier[]) : DEFAULT_TIERS;
+    }
+    return localTiers.length ? localTiers : DEFAULT_TIERS;
+  }, [isServer, server.settings, localTiers]);
+
   const refetch = React.useCallback(async () => {
     const data = await fetchServerData();
     if (data) setServer(data);
@@ -205,6 +225,20 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       return { added, updated, dates: Array.from(new Set(txns.map((t) => t.date))).sort() };
     },
     [isServer, localTxns, refetch],
+  );
+
+  const setSpendTiers = React.useCallback(
+    async (tiers: SpendTier[]) => {
+      if (isServer) {
+        setServer((s) => ({ ...s, settings: { ...s.settings, [TIERS_SETTING]: tiers } }));
+        const okRes = await serverSaveSetting(TIERS_SETTING, tiers);
+        if (!okRes) await refetch();
+        return;
+      }
+      setLocalTiers(tiers);
+      save(TIERS_KEY, tiers);
+    },
+    [isServer, refetch],
   );
 
   const resetImports = React.useCallback(async () => {
@@ -281,6 +315,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     transactionsInRange,
     isDemoTransactions,
     importTransactions,
+    spendTiers,
+    setSpendTiers,
     importRows,
     resetImports,
     addEvent,

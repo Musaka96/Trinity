@@ -7,7 +7,8 @@ import { ArrowLeft } from "lucide-react";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { KpiCard } from "@/components/kpi-card";
 import { Avatar } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
+import { TierBadge } from "@/components/tier-badge";
+import { tierFor } from "@/lib/tiers";
 import { RevenueChart } from "@/components/charts/revenue-chart";
 import { ShiftChart } from "@/components/charts/shift-chart";
 import { RankedList } from "@/components/ranked-list";
@@ -37,7 +38,7 @@ function fmtWhen(iso: string) {
 export default function FanDetailPage() {
   const params = useParams();
   const id = decodeURIComponent(String(params.id));
-  const { transactionsInRange, transactions, isDemoTransactions } = useData();
+  const { transactionsInRange, transactions, isDemoTransactions, spendTiers } = useData();
 
   const mine = txnsForFan(transactionsInRange, id);
   const everMine = txnsForFan(transactions, id);
@@ -81,9 +82,7 @@ export default function FanDetailPage() {
               {t.last ? ` · Last ${fmtWhen(t.last)}` : ""}
             </p>
           </div>
-          <Badge variant={t.total >= 500 ? "accent" : "outline"}>
-            {t.total >= 500 ? "Whale" : t.total >= 100 ? "Mid spender" : "Small spender"}
-          </Badge>
+          <TierBadge tier={tierFor(t.total, spendTiers)} size="md" />
         </div>
       </Card>
 

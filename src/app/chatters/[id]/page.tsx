@@ -13,7 +13,12 @@ import { ShiftChart } from "@/components/charts/shift-chart";
 import { Leaderboard } from "@/components/leaderboard";
 import { EventList } from "@/components/events-ui";
 import { DateRangePicker } from "@/components/date-range-picker";
+import { RankedList } from "@/components/ranked-list";
+import { TierBadge } from "@/components/tier-badge";
 import { useData } from "@/lib/store";
+import { spendByShift, topSpenders, txnsForChatter } from "@/lib/transactions";
+import { bucketByTier, sortTiers, tierFor } from "@/lib/tiers";
+import { formatCurrency } from "@/lib/utils";
 import {
   availableDates,
   avgPerFan,
@@ -30,7 +35,7 @@ import { EVENT_META, eventDates, eventsForChatter } from "@/lib/events";
 export default function ChatterDetailPage() {
   const params = useParams();
   const id = decodeURIComponent(String(params.id));
-  const { rowsInRange, chatters, models, events } = useData();
+  const { rowsInRange, chatters, models, events, transactionsInRange, spendTiers } = useData();
 
   const chatter = chatters.find((c) => c.id === id);
   const recs = rowsForChatter(rowsInRange, id);
@@ -45,6 +50,19 @@ export default function ChatterDetailPage() {
     unlockRate: 0,
     fansChatted: 0,
     dmsSent: 0,
+  }));
+
+  // Transaction-level view: who this chatter actually closes.
+  const tiers = sortTiers(spendTiers);
+  const chatterTxns = txnsForChatter(transactionsInRange, id);
+  const allSpenders = topSpenders(chatterTxns);
+  const spenderBuckets = bucketByTier(allSpenders, tiers);
+  const topSpenderRows = allSpenders.slice(0, 10).map((s) => ({
+    id: s.fanId,
+    name: s.fanName,
+    subtitle: tierFor(s.total, tiers)?.label ?? `${s.count} sales`,
+    total: s.total,
+    count: s.count,
   }));
 
   const chatterEvents = eventsForChatter(events, id);
@@ -112,14 +130,73 @@ export default function ChatterDetailPage() {
           <CardHeader>
             <div>
               <CardTitle>Shift split</CardTitle>
-              <CardDescription>Sales by shift</CardDescription>
+              <CardDescription>
+                {chatterTxns.length ? "From sale timestamps · 04–12 · 12–20 · 20–04" : "Sales by shift"}
+              </CardDescription>
             </div>
           </CardHeader>
           <div className="px-3 pb-4 pt-2">
-            <ShiftChart data={salesByShift(recs)} />
+            <ShiftChart data={chatterTxns.length ? spendByShift(chatterTxns) : salesByShift(recs)} />
           </div>
         </Card>
       </div>
+
+      {chatterTxns.length > 0 && (
+        <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <Card>
+            <CardHeader>
+              <div>
+                <CardTitle>Top spenders closed</CardTitle>
+                <CardDescription>Fans {chatter.name} earned the most from</CardDescription>
+              </div>
+              <Link href="/fans" className="text-xs font-medium text-accent hover:underline">
+                All fans →
+              </Link>
+            </CardHeader>
+            <div className="p-3">
+              <RankedList rows={topSpenderRows} hrefBase="/fans" />
+            </div>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <div>
+                <CardTitle>Spender mix</CardTitle>
+                <CardDescription>Which tags {chatter.name}&apos;s revenue comes from</CardDescription>
+              </div>
+              <Link href="/settings" className="text-xs font-medium text-accent hover:underline">
+                Edit tags →
+              </Link>
+            </CardHeader>
+            <div className="flex flex-col gap-4 p-5 pt-2">
+              {spenderBuckets.map((b) => {
+                const revShare = allSpenders.length
+                  ? (b.total / allSpenders.reduce((a, s) => a + s.total, 0)) * 100
+                  : 0;
+                return (
+                  <div key={b.tier.id}>
+                    <div className="mb-1.5 flex items-center justify-between gap-2 text-sm">
+                      <TierBadge tier={b.tier} />
+                      <span className="tabular text-secondary">
+                        {b.count} fans · {formatCurrency(b.total)}
+                      </span>
+                    </div>
+                    <div className="h-2.5 overflow-hidden rounded-full bg-surface-3">
+                      <div
+                        className="h-full rounded-full"
+                        style={{ width: `${revShare}%`, background: b.tier.color }}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+              {spenderBuckets.length === 0 && (
+                <p className="py-6 text-center text-sm text-muted">No spenders in this period.</p>
+              )}
+            </div>
+          </Card>
+        </div>
+      )}
 
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card>

@@ -9,8 +9,8 @@ export async function GET() {
     return NextResponse.json({ configured: false }, { status: 503 });
   }
   try {
-    const { rows, events, transactions } = await getDataset();
-    return NextResponse.json({ configured: true, rows, events, transactions });
+    const { rows, events, transactions, settings } = await getDataset();
+    return NextResponse.json({ configured: true, rows, events, transactions, settings });
   } catch (err) {
     console.error("GET /api/data failed", err);
     return NextResponse.json({ configured: true, error: "db_error" }, { status: 500 });

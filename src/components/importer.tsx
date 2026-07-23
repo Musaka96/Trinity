@@ -6,30 +6,35 @@ import { CheckCircle2, FileSpreadsheet, RotateCcw, TriangleAlert, UploadCloud } 
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useData } from "@/lib/store";
-import { parseInflowwWorkbook } from "@/lib/import/parse-infloww";
-import { StatRow } from "@/lib/types";
+import { parseReport } from "@/lib/import/parse-report";
+import { StatRow, Transaction } from "@/lib/types";
 import { formatDateRange, formatNumber } from "@/lib/utils";
 
 type Status = "idle" | "parsing" | "ready" | "imported" | "error";
 
 interface Preview {
   fileName: string;
-  rows: StatRow[];
+  kind: "stats" | "transactions";
+  rows?: StatRow[];
+  transactions?: Transaction[];
   sheetUsed: string;
   warnings: string[];
   dates: string[];
+  count: number;
   chatters: number;
   models: number;
+  fans?: number;
 }
 
 export function Importer() {
-  const { importRows, mode } = useData();
+  const { importRows, importTransactions, mode } = useData();
   const dest = mode === "server" ? "the shared database" : "this browser";
   const [status, setStatus] = React.useState<Status>("idle");
   const [dragging, setDragging] = React.useState(false);
   const [preview, setPreview] = React.useState<Preview | null>(null);
   const [result, setResult] = React.useState<{ added: number; updated: number; dates: string[] } | null>(null);
   const [error, setError] = React.useState<string | null>(null);
+  const [applying, setApplying] = React.useState(false);
   const inputRef = React.useRef<HTMLInputElement>(null);
 
   async function handleFile(file: File) {
@@ -38,21 +43,42 @@ export function Importer() {
     setResult(null);
     try {
       const buf = new Uint8Array(await file.arrayBuffer());
-      const res = parseInflowwWorkbook(buf);
-      if (res.rows.length === 0) {
-        setError(res.warnings[0] ?? "No usable rows were found in this file.");
+      const parsed = parseReport(buf);
+
+      if (parsed.kind === "unknown") {
+        setError(parsed.warnings[0]);
         setStatus("error");
         return;
       }
-      setPreview({
-        fileName: file.name,
-        rows: res.rows,
-        sheetUsed: res.sheetUsed,
-        warnings: res.warnings,
-        dates: Array.from(new Set(res.rows.map((r) => r.date))).sort(),
-        chatters: new Set(res.rows.map((r) => r.chatterId)).size,
-        models: new Set(res.rows.map((r) => r.creator)).size,
-      });
+
+      if (parsed.kind === "transactions") {
+        const t = parsed.transactions;
+        setPreview({
+          fileName: file.name,
+          kind: "transactions",
+          transactions: t,
+          sheetUsed: parsed.sheetUsed,
+          warnings: parsed.warnings,
+          dates: Array.from(new Set(t.map((x) => x.date))).sort(),
+          count: t.length,
+          chatters: new Set(t.map((x) => x.chatterId)).size,
+          models: new Set(t.map((x) => x.creator)).size,
+          fans: new Set(t.map((x) => x.fanId)).size,
+        });
+      } else {
+        const r = parsed.rows;
+        setPreview({
+          fileName: file.name,
+          kind: "stats",
+          rows: r,
+          sheetUsed: parsed.sheetUsed,
+          warnings: parsed.warnings,
+          dates: Array.from(new Set(r.map((x) => x.date))).sort(),
+          count: r.length,
+          chatters: new Set(r.map((x) => x.chatterId)).size,
+          models: new Set(r.map((x) => x.creator)).size,
+        });
+      }
       setStatus("ready");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to read the file.");
@@ -60,12 +86,14 @@ export function Importer() {
     }
   }
 
-  const [applying, setApplying] = React.useState(false);
   async function applyImport() {
     if (!preview) return;
     setApplying(true);
     try {
-      const diff = await importRows(preview.rows);
+      const diff =
+        preview.kind === "transactions"
+          ? await importTransactions(preview.transactions!)
+          : await importRows(preview.rows!);
       setResult(diff);
       setStatus("imported");
     } finally {
@@ -105,7 +133,9 @@ export function Importer() {
         </span>
         <div>
           <p className="font-medium">Drop your infloww export here</p>
-          <p className="mt-0.5 text-sm text-muted">.xlsx or .csv — the “Detailed breakdown” sheet is used automatically</p>
+          <p className="mt-0.5 text-sm text-muted">
+            Daily breakdown or transaction report — the type is detected automatically
+          </p>
         </div>
         <Button variant="secondary" size="sm" onClick={() => inputRef.current?.click()}>
           <FileSpreadsheet className="size-4" />
@@ -138,17 +168,24 @@ export function Importer() {
 
       {status === "ready" && preview && (
         <div className="rounded-lg border border-border bg-surface-2/50 p-4">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <FileSpreadsheet className="size-4 text-accent" />
             <p className="text-sm font-medium">{preview.fileName}</p>
+            <Badge variant="accent">
+              {preview.kind === "transactions" ? "Transactions" : "Daily breakdown"}
+            </Badge>
             <Badge variant="neutral">{preview.sheetUsed}</Badge>
           </div>
-          <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <Stat label="Rows" value={formatNumber(preview.rows.length)} />
+          <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-5">
+            <Stat label={preview.kind === "transactions" ? "Sales" : "Rows"} value={formatNumber(preview.count)} />
             <Stat label="Date range" value={formatDateRange(preview.dates)} />
             <Stat label="Chatters" value={String(preview.chatters)} />
             <Stat label="Models" value={String(preview.models)} />
+            {preview.fans !== undefined && <Stat label="Fans" value={String(preview.fans)} />}
           </div>
+          {preview.warnings.length > 0 && (
+            <p className="mt-3 text-xs text-warning">{preview.warnings.join(" ")}</p>
+          )}
           <div className="mt-4 flex gap-2">
             <Button onClick={applyImport} disabled={applying}>
               {applying ? "Applying…" : "Apply import"}
@@ -166,8 +203,8 @@ export function Importer() {
           <div className="flex-1">
             <p className="text-sm font-medium text-primary">Import applied — saved to {dest}</p>
             <p className="mt-0.5 text-sm text-secondary">
-              {result.added} new rows added, {result.updated} existing rows updated across{" "}
-              {formatDateRange(result.dates)}. Re-importing a corrected export overwrites the same rows.
+              {result.added} new added, {result.updated} existing updated across{" "}
+              {formatDateRange(result.dates)}. Re-importing a corrected export overwrites the same records.
             </p>
             <Button variant="secondary" size="sm" className="mt-3" onClick={reset}>
               <RotateCcw className="size-4" />

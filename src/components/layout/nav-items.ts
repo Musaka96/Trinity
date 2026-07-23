@@ -5,6 +5,7 @@ import {
   CalendarClock,
   BarChart3,
   CalendarHeart,
+  HeartHandshake,
   Upload,
   type LucideIcon,
 } from "lucide-react";
@@ -19,6 +20,7 @@ export const navItems: NavItem[] = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/chatters", label: "Chatters", icon: Users },
   { href: "/models", label: "Models", icon: Sparkles },
+  { href: "/fans", label: "Fans", icon: HeartHandshake },
   { href: "/shifts", label: "Shifts", icon: CalendarClock },
   { href: "/events", label: "Events", icon: CalendarHeart },
   { href: "/analytics", label: "Analytics", icon: BarChart3 },

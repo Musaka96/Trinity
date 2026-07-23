@@ -1,7 +1,7 @@
 import "server-only";
 import postgres from "postgres";
 import seedJson from "@/data/seed.json";
-import { Dataset, StatRow } from "./types";
+import { Dataset, StatRow, Transaction } from "./types";
 import { TrinityEvent } from "./events";
 
 /**
@@ -68,6 +68,29 @@ function fromDb(d: any): StatRow {
   };
 }
 
+const TXN_COLS = [
+  "id", "datetime", "date", "shift", "chatter_id", "chatter_name", "group_name",
+  "creator", "platform", "tier", "fan_id", "fan_name", "earnings",
+] as const;
+
+function toDbTxn(t: Transaction) {
+  return {
+    id: t.id, datetime: t.datetime, date: t.date, shift: t.shift,
+    chatter_id: t.chatterId, chatter_name: t.chatterName, group_name: t.group,
+    creator: t.creator, platform: t.platform, tier: t.tier,
+    fan_id: t.fanId, fan_name: t.fanName, earnings: t.earnings,
+  };
+}
+
+function txnFromDb(d: any): Transaction {
+  return {
+    id: d.id, datetime: d.datetime, date: d.date, shift: d.shift,
+    chatterId: d.chatter_id, chatterName: d.chatter_name, group: d.group_name,
+    creator: d.creator, platform: d.platform, tier: d.tier,
+    fanId: d.fan_id, fanName: d.fan_name, earnings: Number(d.earnings),
+  };
+}
+
 function eventFromDb(d: any): TrinityEvent {
   return {
     id: d.id, type: d.type, title: d.title, note: d.note ?? undefined,
@@ -104,6 +127,16 @@ async function initSchema() {
       date text NOT NULL, end_date text, model_id text, chatter_id text, shift text,
       created_at text NOT NULL
     )`;
+  await sql`
+    CREATE TABLE IF NOT EXISTS transactions (
+      id text PRIMARY KEY,
+      datetime text NOT NULL, date text NOT NULL, shift text NOT NULL,
+      chatter_id text NOT NULL, chatter_name text NOT NULL, group_name text NOT NULL,
+      creator text NOT NULL, platform text NOT NULL, tier text NOT NULL,
+      fan_id text NOT NULL, fan_name text NOT NULL,
+      earnings double precision NOT NULL
+    )`;
+  await sql`CREATE INDEX IF NOT EXISTS transactions_date_idx ON transactions (date)`;
   const [{ count }] = await sql`SELECT count(*)::int AS count FROM stat_rows`;
   if (count === 0 && seed.rows.length) await insertRows(seed.rows);
 }
@@ -123,14 +156,55 @@ async function insertRows(rows: StatRow[]) {
   }
 }
 
-export async function getDataset(): Promise<{ rows: StatRow[]; events: TrinityEvent[] }> {
+export async function getDataset(): Promise<{
+  rows: StatRow[];
+  events: TrinityEvent[];
+  transactions: Transaction[];
+}> {
   await ensureSchema();
   const sql = getSql();
-  const [rows, events] = await Promise.all([
+  const [rows, events, txns] = await Promise.all([
     sql`SELECT * FROM stat_rows ORDER BY date`,
     sql`SELECT * FROM events ORDER BY date DESC`,
+    sql`SELECT * FROM transactions ORDER BY datetime DESC`,
   ]);
-  return { rows: rows.map(fromDb), events: events.map(eventFromDb) };
+  return {
+    rows: rows.map(fromDb),
+    events: events.map(eventFromDb),
+    transactions: txns.map(txnFromDb),
+  };
+}
+
+async function insertTxns(txns: Transaction[]) {
+  const sql = getSql();
+  const dbRows = txns.map(toDbTxn);
+  const updateSet = TXN_COLS.filter((c) => c !== "id")
+    .map((c) => `"${c}" = excluded."${c}"`)
+    .join(", ");
+  for (let i = 0; i < dbRows.length; i += 500) {
+    const chunk = dbRows.slice(i, i + 500);
+    await sql`
+      INSERT INTO transactions ${sql(chunk, ...TXN_COLS)}
+      ON CONFLICT (id) DO UPDATE SET ${sql.unsafe(updateSet)}
+    `;
+  }
+}
+
+export async function upsertTransactions(
+  txns: Transaction[],
+): Promise<{ added: number; updated: number; dates: string[] }> {
+  await ensureSchema();
+  const sql = getSql();
+  const ids = txns.map((t) => t.id);
+  const existing = ids.length
+    ? new Set((await sql`SELECT id FROM transactions WHERE id IN ${sql(ids)}`).map((r) => r.id))
+    : new Set<string>();
+  await insertTxns(txns);
+  let added = 0;
+  let updated = 0;
+  for (const t of txns) (existing.has(t.id) ? updated++ : added++);
+  const dates = Array.from(new Set(txns.map((t) => t.date))).sort();
+  return { added, updated, dates };
 }
 
 export async function upsertRows(rows: StatRow[]): Promise<{ added: number; updated: number; dates: string[] }> {
@@ -152,6 +226,7 @@ export async function resetToSeed(): Promise<void> {
   await ensureSchema();
   const sql = getSql();
   await sql`TRUNCATE stat_rows`;
+  await sql`TRUNCATE transactions`;
   if (seed.rows.length) await insertRows(seed.rows);
 }
 

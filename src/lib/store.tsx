@@ -2,15 +2,17 @@
 
 import * as React from "react";
 import seedJson from "@/data/seed.json";
-import { Chatter, Dataset, Model, StatRow } from "./types";
+import { Chatter, Dataset, Model, StatRow, Transaction } from "./types";
 import { deriveChatters, deriveModels, emptyDataset, importDiff, mergeDataset } from "./dataset";
 import { TrinityEvent } from "./events";
-import { EVENTS_KEY, IMPORTS_KEY, clear, load, save } from "./persistence";
+import { generateDemoTransactions } from "./demo-transactions";
+import { EVENTS_KEY, IMPORTS_KEY, TXNS_KEY, clear, load, save } from "./persistence";
 import {
   fetchServerData,
   serverCreateEvent,
   serverDeleteEvent,
   serverImport,
+  serverImportTransactions,
   serverReset,
   serverUpdateEvent,
 } from "./api";
@@ -42,6 +44,13 @@ interface StoreValue {
   rowsInRange: StatRow[];
   setRange: (range: DateRange | null) => void;
 
+  /** Transaction-level sales (fan payments). Demo data until a real import. */
+  transactions: Transaction[];
+  transactionsInRange: Transaction[];
+  /** True while showing generated demo transactions (no real import yet). */
+  isDemoTransactions: boolean;
+  importTransactions: (txns: Transaction[]) => Promise<{ added: number; updated: number; dates: string[] }>;
+
   importRows: (rows: StatRow[]) => Promise<{ added: number; updated: number; dates: string[] }>;
   resetImports: () => Promise<void>;
 
@@ -65,14 +74,16 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const [ready, setReady] = React.useState(false);
 
   // Server-backed data (used when a database is configured).
-  const [server, setServer] = React.useState<{ rows: StatRow[]; events: TrinityEvent[] }>({
-    rows: seed.rows,
-    events: [],
-  });
+  const [server, setServer] = React.useState<{
+    rows: StatRow[];
+    events: TrinityEvent[];
+    transactions: Transaction[];
+  }>({ rows: seed.rows, events: [], transactions: [] });
 
   // Local fallback (browser persistence).
   const [imports, setImports] = React.useState<Dataset>(emptyDataset());
   const [localEvents, setLocalEvents] = React.useState<TrinityEvent[]>([]);
+  const [localTxns, setLocalTxns] = React.useState<Transaction[]>([]);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -85,6 +96,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       } else {
         setImports(load<Dataset>(IMPORTS_KEY, emptyDataset()));
         setLocalEvents(load<TrinityEvent[]>(EVENTS_KEY, []));
+        setLocalTxns(load<Transaction[]>(TXNS_KEY, []));
         setMode("local");
       }
       setReady(true);
@@ -123,6 +135,34 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     [dataset, range],
   );
 
+  // ---- Transactions (fan-level sales) -------------------------------------
+  const realTxns = isServer ? server.transactions : localTxns;
+
+  // Demo set, generated only while no real transactions exist. Ordering the
+  // entities by real sales makes the fake traffic mirror actual dominance.
+  const demoTxns = React.useMemo(() => {
+    if (realTxns.length) return [];
+    const byChatter = new Map<string, number>();
+    const byModel = new Map<string, number>();
+    for (const r of dataset.rows) {
+      byChatter.set(r.chatterId, (byChatter.get(r.chatterId) ?? 0) + r.sales);
+      byModel.set(r.creator, (byModel.get(r.creator) ?? 0) + r.sales);
+    }
+    return generateDemoTransactions({
+      chatters: [...chatters].sort((a, b) => (byChatter.get(b.id) ?? 0) - (byChatter.get(a.id) ?? 0)),
+      models: [...models].sort((a, b) => (byModel.get(b.id) ?? 0) - (byModel.get(a.id) ?? 0)),
+      dates: Array.from(new Set(dataset.rows.map((r) => r.date))).sort(),
+    });
+  }, [realTxns.length, chatters, models, dataset]);
+
+  const transactions = realTxns.length ? realTxns : demoTxns;
+  const isDemoTransactions = realTxns.length === 0 && demoTxns.length > 0;
+
+  const transactionsInRange = React.useMemo(
+    () => (range ? transactions.filter((t) => t.date >= range.from && t.date <= range.to) : transactions),
+    [transactions, range],
+  );
+
   const refetch = React.useCallback(async () => {
     const data = await fetchServerData();
     if (data) setServer(data);
@@ -146,6 +186,27 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     [isServer, imports, refetch],
   );
 
+  const importTransactions = React.useCallback(
+    async (txns: Transaction[]) => {
+      if (isServer) {
+        const diff = await serverImportTransactions(txns);
+        await refetch();
+        return diff ?? { added: 0, updated: 0, dates: [] };
+      }
+      const existing = new Set(localTxns.map((t) => t.id));
+      let added = 0;
+      let updated = 0;
+      for (const t of txns) (existing.has(t.id) ? updated++ : added++);
+      const byId = new Map(localTxns.map((t) => [t.id, t] as const));
+      for (const t of txns) byId.set(t.id, t);
+      const next = Array.from(byId.values()).sort((a, b) => b.datetime.localeCompare(a.datetime));
+      setLocalTxns(next);
+      save(TXNS_KEY, next);
+      return { added, updated, dates: Array.from(new Set(txns.map((t) => t.date))).sort() };
+    },
+    [isServer, localTxns, refetch],
+  );
+
   const resetImports = React.useCallback(async () => {
     if (isServer) {
       await serverReset();
@@ -153,7 +214,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       return;
     }
     clear(IMPORTS_KEY);
+    clear(TXNS_KEY);
     setImports(emptyDataset());
+    setLocalTxns([]);
   }, [isServer, refetch]);
 
   const persistLocalEvents = React.useCallback((next: TrinityEvent[]) => {
@@ -214,6 +277,10 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     bounds,
     rowsInRange,
     setRange,
+    transactions,
+    transactionsInRange,
+    isDemoTransactions,
+    importTransactions,
     importRows,
     resetImports,
     addEvent,

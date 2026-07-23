@@ -74,6 +74,38 @@ export interface StatRow {
   charCount: number;
 }
 
+/**
+ * A single fan payment: one row of the transaction-level infloww report
+ * (Date & time · Employee · Creator · Fan · Earnings).
+ *
+ * Unlike StatRow this carries a real timestamp, so the shift is exact, and a
+ * `fan` dimension, which powers spender rankings and per-spender history.
+ */
+export interface Transaction {
+  /** Upsert key. */
+  id: string;
+  /** Full ISO timestamp (UTC). */
+  datetime: string;
+  /** YYYY-MM-DD, derived from datetime — used by the date-range filter. */
+  date: string;
+  /** Derived from the hour of day: 04–12 / 12–20 / 20–04. */
+  shift: ShiftId;
+  chatterId: string;
+  chatterName: string;
+  group: string;
+  creator: string;
+  platform: Platform;
+  tier: "VIP" | "Free" | "Standard";
+  fanId: string;
+  fanName: string;
+  earnings: number;
+}
+
+export interface Fan {
+  id: string;
+  name: string;
+}
+
 export interface Chatter {
   id: string; // email
   name: string;

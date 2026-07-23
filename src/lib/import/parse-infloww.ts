@@ -73,7 +73,7 @@ function parseWindow(raw: unknown): { date: string; shift: ShiftId } | null {
   return { date, shift: shiftFromRange(startHour, isFullDay) };
 }
 
-function cleanCreator(raw: string): { name: string; platform: Platform; tier: "VIP" | "Free" | "Standard" } {
+export function cleanCreator(raw: string): { name: string; platform: Platform; tier: "VIP" | "Free" | "Standard" } {
   let name = raw.trim();
   let platform: Platform = "Other";
   const suffix = name.match(/\(([^)]+)\)\s*$/);
@@ -114,7 +114,10 @@ function detailScore(rows: unknown[][], creatorIdx: number, dtIdx: number): numb
 }
 
 export function parseInflowwWorkbook(input: ArrayBuffer | Uint8Array): ParseResult {
-  const wb = XLSX.read(input, { type: "array" });
+  return parseStatsFromWorkbook(XLSX.read(input, { type: "array", cellDates: true }));
+}
+
+export function parseStatsFromWorkbook(wb: XLSX.WorkBook): ParseResult {
   const warnings: string[] = [];
 
   // Rank candidate sheets: prefer "Detailed breakdown", else best detail score.

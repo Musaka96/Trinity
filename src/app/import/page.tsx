@@ -11,6 +11,14 @@ import { useData } from "@/lib/store";
 import { availableDates } from "@/lib/analytics";
 import { formatDateRange, formatNumber } from "@/lib/utils";
 
+const TXN_SCHEMA: { column: string; maps: string }[] = [
+  { column: "Date & time", maps: "timestamp + shift (04–12 / 12–20 / 20–04)" },
+  { column: "Employee", maps: "chatter" },
+  { column: "Creator", maps: "model" },
+  { column: "Fan", maps: "fan / spender" },
+  { column: "Earnings", maps: "earnings" },
+];
+
 const SCHEMA: { column: string; maps: string }[] = [
   { column: "Date/Time Europe/Belgrade", maps: "date + shift (from the time window)" },
   { column: "Employees / Email", maps: "chatter (email = stable id)" },
@@ -51,7 +59,9 @@ export default function ImportPage() {
             <CardHeader>
               <div>
                 <CardTitle>Upload an export</CardTitle>
-                <CardDescription>The finest-grain sheet (Detailed breakdown) is detected automatically</CardDescription>
+                <CardDescription>
+                  Either report works — Trinity detects the type and picks the finest-grain sheet
+                </CardDescription>
               </div>
             </CardHeader>
             <CardContent>
@@ -62,7 +72,36 @@ export default function ImportPage() {
           <Card>
             <CardHeader>
               <div>
-                <CardTitle>How columns map</CardTitle>
+                <CardTitle>Transaction report</CardTitle>
+                <CardDescription>One row per fan payment — powers fans, spenders and real shifts</CardDescription>
+              </div>
+            </CardHeader>
+            <CardContent className="pt-0">
+              <div className="overflow-x-auto rounded-lg border border-border">
+                <table className="w-full min-w-[480px] text-sm">
+                  <thead>
+                    <tr className="border-b border-border bg-surface-2/50 text-left text-xs text-muted">
+                      <th className="px-4 py-2.5 font-medium">infloww column</th>
+                      <th className="px-4 py-2.5 font-medium">Trinity field</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {TXN_SCHEMA.map((r, i) => (
+                      <tr key={r.column} className={i % 2 ? "bg-surface-1" : ""}>
+                        <td className="px-4 py-2.5 font-mono text-xs text-primary">{r.column}</td>
+                        <td className="px-4 py-2.5 text-secondary">{r.maps}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <div>
+                <CardTitle>Daily breakdown report</CardTitle>
                 <CardDescription>infloww column → Trinity field</CardDescription>
               </div>
             </CardHeader>

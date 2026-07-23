@@ -13,7 +13,9 @@ import { ShiftChart } from "@/components/charts/shift-chart";
 import { Leaderboard } from "@/components/leaderboard";
 import { EventList } from "@/components/events-ui";
 import { DateRangePicker } from "@/components/date-range-picker";
+import { RankedList } from "@/components/ranked-list";
 import { useData } from "@/lib/store";
+import { chattersRanked, spendByShift, topSpenders, txnsForModel } from "@/lib/transactions";
 import {
   availableDates,
   avgPerFan,
@@ -30,13 +32,18 @@ import { EVENT_META, eventDates, eventsForModel } from "@/lib/events";
 export default function ModelDetailPage() {
   const params = useParams();
   const id = decodeURIComponent(String(params.id));
-  const { rowsInRange, chatters, models, events } = useData();
+  const { rowsInRange, chatters, models, events, transactionsInRange } = useData();
 
   const model = models.find((m) => m.id === id);
   const recs = rowsForModel(rowsInRange, id);
   const t = sumTotals(recs);
 
   const breakdown = modelChatterBreakdown(rowsInRange, id, chatters);
+
+  // Transaction-level data (when present) gives real shift timing and spenders.
+  const modelTxns = txnsForModel(transactionsInRange, id);
+  const spenders = topSpenders(modelTxns, 10);
+  const txnChatters = chattersRanked(modelTxns, 10);
   const chatterRows = breakdown.map(({ chatter, net }) => ({
     id: chatter.id,
     name: chatter.name,
@@ -117,14 +124,56 @@ export default function ModelDetailPage() {
           <CardHeader>
             <div>
               <CardTitle>Shift split</CardTitle>
-              <CardDescription>Sales by shift</CardDescription>
+              <CardDescription>
+                {modelTxns.length ? "From sale timestamps · 04–12 · 12–20 · 20–04" : "Sales by shift"}
+              </CardDescription>
             </div>
           </CardHeader>
           <div className="px-3 pb-4 pt-2">
-            <ShiftChart data={salesByShift(recs)} />
+            <ShiftChart data={modelTxns.length ? spendByShift(modelTxns) : salesByShift(recs)} />
           </div>
         </Card>
       </div>
+
+      {modelTxns.length > 0 && (
+        <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <Card>
+            <CardHeader>
+              <div>
+                <CardTitle>Top spenders</CardTitle>
+                <CardDescription>Fans ranked by spend on {model.name}</CardDescription>
+              </div>
+              <Link href="/fans" className="text-xs font-medium text-accent hover:underline">
+                All fans →
+              </Link>
+            </CardHeader>
+            <div className="p-3">
+              <RankedList
+                rows={spenders.map((s) => ({
+                  id: s.fanId,
+                  name: s.fanName,
+                  subtitle: `${s.count} sales`,
+                  total: s.total,
+                  count: s.count,
+                }))}
+                hrefBase="/fans"
+              />
+            </div>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <div>
+                <CardTitle>Chatters by fan sales</CardTitle>
+                <CardDescription>Who earned it, from the transaction feed</CardDescription>
+              </div>
+            </CardHeader>
+            <div className="p-3">
+              <RankedList rows={txnChatters} hrefBase="/chatters" />
+            </div>
+          </Card>
+        </div>
+      )}
 
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card>

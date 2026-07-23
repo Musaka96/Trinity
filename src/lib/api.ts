@@ -1,4 +1,4 @@
-import { StatRow } from "./types";
+import { StatRow, Transaction } from "./types";
 import { TrinityEvent } from "./events";
 
 /**
@@ -10,6 +10,7 @@ import { TrinityEvent } from "./events";
 export interface ServerData {
   rows: StatRow[];
   events: TrinityEvent[];
+  transactions: Transaction[];
 }
 
 export async function fetchServerData(): Promise<ServerData | null> {
@@ -18,7 +19,7 @@ export async function fetchServerData(): Promise<ServerData | null> {
     if (!res.ok) return null;
     const json = await res.json();
     if (!json?.configured) return null;
-    return { rows: json.rows ?? [], events: json.events ?? [] };
+    return { rows: json.rows ?? [], events: json.events ?? [], transactions: json.transactions ?? [] };
   } catch {
     return null;
   }
@@ -36,6 +37,21 @@ export async function serverImport(rows: StatRow[]): Promise<ImportDiff | null> 
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ rows }),
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    return { added: json.added, updated: json.updated, dates: json.dates };
+  } catch {
+    return null;
+  }
+}
+
+export async function serverImportTransactions(transactions: Transaction[]): Promise<ImportDiff | null> {
+  try {
+    const res = await fetch("/api/import", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ transactions }),
     });
     if (!res.ok) return null;
     const json = await res.json();

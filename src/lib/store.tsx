@@ -6,50 +6,105 @@ import { Chatter, Dataset, Model, StatRow } from "./types";
 import { deriveChatters, deriveModels, emptyDataset, importDiff, mergeDataset } from "./dataset";
 import { TrinityEvent } from "./events";
 import { EVENTS_KEY, IMPORTS_KEY, clear, load, save } from "./persistence";
+import {
+  fetchServerData,
+  serverCreateEvent,
+  serverDeleteEvent,
+  serverImport,
+  serverReset,
+  serverUpdateEvent,
+} from "./api";
 
 const seed = seedJson as unknown as Dataset;
 
+export type StorageMode = "loading" | "server" | "local";
+
 interface StoreValue {
   ready: boolean;
-  dataset: Dataset; // seed merged with user imports
+  mode: StorageMode;
+  dataset: Dataset;
   chatters: Chatter[];
   models: Model[];
   events: TrinityEvent[];
   lastUpdated: string | null;
   importCount: number;
 
-  importRows: (rows: StatRow[]) => { added: number; updated: number; dates: string[] };
-  resetImports: () => void;
+  importRows: (rows: StatRow[]) => Promise<{ added: number; updated: number; dates: string[] }>;
+  resetImports: () => Promise<void>;
 
-  addEvent: (ev: Omit<TrinityEvent, "id" | "createdAt">) => void;
-  updateEvent: (ev: TrinityEvent) => void;
-  deleteEvent: (id: string) => void;
+  addEvent: (ev: Omit<TrinityEvent, "id" | "createdAt">) => Promise<void>;
+  updateEvent: (ev: TrinityEvent) => Promise<void>;
+  deleteEvent: (id: string) => Promise<void>;
 }
 
 const StoreContext = React.createContext<StoreValue | null>(null);
 
+function newEvent(ev: Omit<TrinityEvent, "id" | "createdAt">): TrinityEvent {
+  return {
+    ...ev,
+    id: `evt_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`,
+    createdAt: new Date().toISOString(),
+  };
+}
+
 export function DataProvider({ children }: { children: React.ReactNode }) {
-  // User imports (deltas), merged over the seed at read time.
-  const [imports, setImports] = React.useState<Dataset>(emptyDataset());
-  const [events, setEvents] = React.useState<TrinityEvent[]>([]);
+  const [mode, setMode] = React.useState<StorageMode>("loading");
   const [ready, setReady] = React.useState(false);
 
-  // Hydrate from localStorage after mount (SSR renders seed-only, matching
-  // the client's first paint, so there is no hydration mismatch).
+  // Server-backed data (used when a database is configured).
+  const [server, setServer] = React.useState<{ rows: StatRow[]; events: TrinityEvent[] }>({
+    rows: seed.rows,
+    events: [],
+  });
+
+  // Local fallback (browser persistence).
+  const [imports, setImports] = React.useState<Dataset>(emptyDataset());
+  const [localEvents, setLocalEvents] = React.useState<TrinityEvent[]>([]);
+
   React.useEffect(() => {
-    setImports(load<Dataset>(IMPORTS_KEY, emptyDataset()));
-    setEvents(load<TrinityEvent[]>(EVENTS_KEY, []));
-    setReady(true);
+    let cancelled = false;
+    (async () => {
+      const data = await fetchServerData();
+      if (cancelled) return;
+      if (data) {
+        setServer(data);
+        setMode("server");
+      } else {
+        setImports(load<Dataset>(IMPORTS_KEY, emptyDataset()));
+        setLocalEvents(load<TrinityEvent[]>(EVENTS_KEY, []));
+        setMode("local");
+      }
+      setReady(true);
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  const dataset = React.useMemo(() => mergeDataset(seed, imports.rows), [imports]);
+  const isServer = mode === "server";
+
+  const dataset = React.useMemo(
+    () => (isServer ? { rows: server.rows, updatedAt: null } : mergeDataset(seed, imports.rows)),
+    [isServer, server.rows, imports],
+  );
+  const events = isServer ? server.events : localEvents;
   const chatters = React.useMemo(() => deriveChatters(dataset.rows), [dataset]);
   const models = React.useMemo(() => deriveModels(dataset.rows), [dataset]);
+  const lastUpdated = isServer ? null : imports.updatedAt ?? seed.updatedAt;
+  const importCount = isServer ? server.rows.length : imports.rows.length;
 
-  const lastUpdated = imports.updatedAt ?? seed.updatedAt;
+  const refetch = React.useCallback(async () => {
+    const data = await fetchServerData();
+    if (data) setServer(data);
+  }, []);
 
   const importRows = React.useCallback(
-    (rows: StatRow[]) => {
+    async (rows: StatRow[]) => {
+      if (isServer) {
+        const diff = await serverImport(rows);
+        await refetch();
+        return diff ?? { added: 0, updated: 0, dates: [] };
+      }
       const diff = importDiff(imports, rows);
       setImports((prev) => {
         const next = mergeDataset(prev, rows);
@@ -58,49 +113,73 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       });
       return diff;
     },
-    [imports],
+    [isServer, imports, refetch],
   );
 
-  const resetImports = React.useCallback(() => {
+  const resetImports = React.useCallback(async () => {
+    if (isServer) {
+      await serverReset();
+      await refetch();
+      return;
+    }
     clear(IMPORTS_KEY);
     setImports(emptyDataset());
-  }, []);
+  }, [isServer, refetch]);
 
-  const persistEvents = React.useCallback((next: TrinityEvent[]) => {
-    setEvents(next);
+  const persistLocalEvents = React.useCallback((next: TrinityEvent[]) => {
+    setLocalEvents(next);
     save(EVENTS_KEY, next);
   }, []);
 
   const addEvent = React.useCallback(
-    (ev: Omit<TrinityEvent, "id" | "createdAt">) => {
-      const full: TrinityEvent = {
-        ...ev,
-        id: `evt_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`,
-        createdAt: new Date().toISOString(),
-      };
-      persistEvents([full, ...events]);
+    async (ev: Omit<TrinityEvent, "id" | "createdAt">) => {
+      const full = newEvent(ev);
+      if (isServer) {
+        setServer((s) => ({ ...s, events: [full, ...s.events] }));
+        const okRes = await serverCreateEvent(full);
+        if (!okRes) await refetch();
+        return;
+      }
+      persistLocalEvents([full, ...localEvents]);
     },
-    [events, persistEvents],
+    [isServer, localEvents, persistLocalEvents, refetch],
   );
 
   const updateEvent = React.useCallback(
-    (ev: TrinityEvent) => persistEvents(events.map((e) => (e.id === ev.id ? ev : e))),
-    [events, persistEvents],
+    async (ev: TrinityEvent) => {
+      if (isServer) {
+        setServer((s) => ({ ...s, events: s.events.map((e) => (e.id === ev.id ? ev : e)) }));
+        const okRes = await serverUpdateEvent(ev);
+        if (!okRes) await refetch();
+        return;
+      }
+      persistLocalEvents(localEvents.map((e) => (e.id === ev.id ? ev : e)));
+    },
+    [isServer, localEvents, persistLocalEvents, refetch],
   );
 
   const deleteEvent = React.useCallback(
-    (id: string) => persistEvents(events.filter((e) => e.id !== id)),
-    [events, persistEvents],
+    async (id: string) => {
+      if (isServer) {
+        setServer((s) => ({ ...s, events: s.events.filter((e) => e.id !== id) }));
+        const okRes = await serverDeleteEvent(id);
+        if (!okRes) await refetch();
+        return;
+      }
+      persistLocalEvents(localEvents.filter((e) => e.id !== id));
+    },
+    [isServer, localEvents, persistLocalEvents, refetch],
   );
 
   const value: StoreValue = {
     ready,
+    mode,
     dataset,
     chatters,
     models,
     events,
     lastUpdated,
-    importCount: imports.rows.length,
+    importCount,
     importRows,
     resetImports,
     addEvent,

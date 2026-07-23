@@ -42,13 +42,33 @@ segments the data into the three shifts with no extra work.
 
 ## Data & persistence
 
-- **Seed**: the bundled export lives in `src/data/seed.json` and always loads.
-- **Imports & events**: saved to `localStorage`, merged over the seed at read
-  time, so they persist across reloads/sessions on that machine and re-imports
-  overwrite matching rows in place.
-- The store ([src/lib/store.tsx](src/lib/store.tsx)) is a thin, swappable
-  adapter — pointing its load/save at a server route (e.g. Vercel Postgres) makes
-  the dataset shared across your whole team **without changing any screens**.
+Two modes, chosen automatically at runtime:
+
+- **Shared database** (when `POSTGRES_URL` is set): imports and events are stored
+  in Postgres and served from `/api/*`, so the whole team sees the same data on
+  every device. Imports upsert row-by-row (`ON CONFLICT (key) DO UPDATE`).
+- **This browser** (no database): imports and events are saved to `localStorage`,
+  merged over the bundled seed. Persists across reloads/sessions on that machine.
+
+The store ([src/lib/store.tsx](src/lib/store.tsx)) probes `/api/data` on load and
+switches modes with **no change to any screen**. The seed (`src/data/seed.json`)
+is the initial data — it seeds the database on first run and is the fallback
+dataset in browser mode.
+
+## Backend setup (shared database on Vercel)
+
+1. In your Vercel project → **Storage → Create Database → Postgres** (Neon).
+   Choose a region near your team and click **Create**.
+2. **Connect** the database to the Trinity project when prompted. Vercel injects
+   `POSTGRES_URL` / `DATABASE_URL` into the project's environment automatically.
+3. **Redeploy** (Deployments → ⋯ → Redeploy, or push a commit).
+
+That's it — tables are created and seeded on the first request. The Import page
+badge shows **“Shared database”** when it's live. To run against it locally, copy
+the connection string into `.env.local` as `POSTGRES_URL=…` (see `.env.example`).
+
+API routes: `GET /api/data`, `POST /api/import`, `POST /api/events`,
+`PUT|DELETE /api/events/:id`, `POST /api/reset`.
 
 ## Tech stack
 

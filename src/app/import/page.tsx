@@ -26,8 +26,9 @@ const SCHEMA: { column: string; maps: string }[] = [
 ];
 
 export default function ImportPage() {
-  const { dataset, chatters, models, lastUpdated, importCount, resetImports } = useData();
+  const { dataset, chatters, models, lastUpdated, importCount, resetImports, mode } = useData();
   const dates = availableDates(dataset.rows);
+  const isServer = mode === "server";
 
   return (
     <div>
@@ -35,8 +36,8 @@ export default function ImportPage() {
         title="Import from infloww"
         description="Upload an infloww export. Data is saved in this browser and re-imports update existing rows."
       >
-        <Badge variant={importCount > 0 ? "good" : "neutral"}>
-          {importCount > 0 ? `${formatNumber(importCount)} imported rows` : "Sample data"}
+        <Badge variant={isServer ? "good" : "neutral"}>
+          {mode === "loading" ? "Connecting…" : isServer ? "Shared database" : "This browser only"}
         </Badge>
       </PageHeader>
 
@@ -125,11 +126,18 @@ export default function ImportPage() {
           <Card>
             <CardContent>
               <p className="text-sm font-medium">Where is my data stored?</p>
-              <p className="mt-2 text-xs leading-relaxed text-muted">
-                Imports and events are saved locally in this browser, so they persist across reloads and
-                sessions on this device. To share one dataset across your whole team, connect a database
-                (e.g. Vercel Postgres) — the app is structured for that upgrade without changing any screens.
-              </p>
+              {isServer ? (
+                <p className="mt-2 text-xs leading-relaxed text-muted">
+                  Connected to your <span className="text-primary">shared database</span>. Imports and events
+                  are saved server-side, so everyone on the team sees the same data on every device.
+                </p>
+              ) : (
+                <p className="mt-2 text-xs leading-relaxed text-muted">
+                  No database detected, so data is saved locally in <span className="text-primary">this browser</span>{" "}
+                  only. Connect a Postgres database in Vercel (env var <code className="text-primary">POSTGRES_URL</code>)
+                  to share one dataset across your whole team — no code changes needed.
+                </p>
+              )}
             </CardContent>
           </Card>
         </div>

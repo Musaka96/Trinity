@@ -59,11 +59,17 @@ export function Importer() {
     }
   }
 
-  function applyImport() {
+  const [applying, setApplying] = React.useState(false);
+  async function applyImport() {
     if (!preview) return;
-    const diff = importRows(preview.rows);
-    setResult(diff);
-    setStatus("imported");
+    setApplying(true);
+    try {
+      const diff = await importRows(preview.rows);
+      setResult(diff);
+      setStatus("imported");
+    } finally {
+      setApplying(false);
+    }
   }
 
   function reset() {
@@ -143,7 +149,9 @@ export function Importer() {
             <Stat label="Models" value={String(preview.models)} />
           </div>
           <div className="mt-4 flex gap-2">
-            <Button onClick={applyImport}>Apply import</Button>
+            <Button onClick={applyImport} disabled={applying}>
+              {applying ? "Applying…" : "Apply import"}
+            </Button>
             <Button variant="ghost" onClick={reset}>
               Cancel
             </Button>

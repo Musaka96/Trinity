@@ -9,6 +9,7 @@ const SHIFT_COLORS: Record<string, string> = {
   Morning: "var(--series-4)",
   Afternoon: "var(--series-1)",
   Night: "var(--series-7)",
+  "Full day": "var(--series-1)",
 };
 
 export function ShiftChart({ data }: { data: { shift: string; net: number }[] }) {

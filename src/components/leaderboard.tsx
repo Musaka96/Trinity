@@ -5,26 +5,38 @@ import Link from "next/link";
 import { motion } from "motion/react";
 import { Avatar } from "@/components/ui/avatar";
 import { LeaderRow } from "@/lib/analytics";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, formatNumber } from "@/lib/utils";
 
 export function Leaderboard({
   rows,
   hrefBase,
+  metric = "unlock",
 }: {
   rows: LeaderRow[];
   hrefBase: string;
+  metric?: "unlock" | "fans" | "dms" | "none";
 }) {
   const max = Math.max(...rows.map((r) => r.net), 1);
+
+  const meta = (r: LeaderRow) =>
+    metric === "none"
+      ? r.subtitle
+      : metric === "fans"
+        ? `${formatNumber(r.fansChatted, { compact: true })} fans`
+        : metric === "dms"
+          ? `${formatNumber(r.dmsSent, { compact: true })} msgs`
+          : `${r.unlockRate.toFixed(1)}% unlock`;
+
   return (
     <div className="flex flex-col">
       {rows.map((row, i) => (
         <Link
           key={row.id}
-          href={`${hrefBase}/${row.id}`}
+          href={`${hrefBase}/${encodeURIComponent(row.id)}`}
           className="group relative flex items-center gap-3 rounded-lg px-2 py-2.5 transition-colors hover:bg-surface-2"
         >
           <span className="w-5 text-center text-xs font-medium text-muted tabular">{i + 1}</span>
-          <Avatar src={row.avatar} name={row.name} size={34} />
+          <Avatar name={row.name} size={34} />
           <div className="min-w-0 flex-1">
             <div className="flex items-center justify-between gap-2">
               <p className="truncate text-sm font-medium text-primary">{row.name}</p>
@@ -43,7 +55,7 @@ export function Leaderboard({
                   transition={{ duration: 0.8, delay: i * 0.05, ease: [0.16, 1, 0.3, 1] }}
                 />
               </div>
-              <span className="shrink-0 text-[11px] text-muted">{row.subtitle}</span>
+              <span className="shrink-0 text-[11px] text-muted">{meta(row)}</span>
             </div>
           </div>
         </Link>

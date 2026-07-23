@@ -5,6 +5,7 @@ import {
   Area,
   AreaChart,
   CartesianGrid,
+  ReferenceDot,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -18,16 +19,31 @@ export interface RevenuePoint {
   net: number;
 }
 
-export function RevenueChart({ data }: { data: RevenuePoint[] }) {
+export interface EventMarker {
+  date: string;
+  color: string;
+  label: string;
+}
+
+export function RevenueChart({
+  data,
+  markers = [],
+  height = 300,
+}: {
+  data: RevenuePoint[];
+  markers?: EventMarker[];
+  height?: number;
+}) {
   const tickFmt = (d: string) => {
     const dt = new Date(d + "T00:00:00Z");
     return dt.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
   };
+  const byDate = new Map(data.map((d) => [d.date, d.net]));
 
   return (
-    <div className="h-[300px] w-full">
+    <div className="w-full" style={{ height }}>
       <ResponsiveContainer width="100%" height="100%">
-        <AreaChart data={data} margin={{ top: 8, right: 8, left: 4, bottom: 0 }}>
+        <AreaChart data={data} margin={{ top: 12, right: 8, left: 4, bottom: 0 }}>
           <defs>
             <linearGradient id="rev-fill" x1="0" y1="0" x2="0" y2="1">
               <stop offset="0%" stopColor="var(--series-1)" stopOpacity={0.35} />
@@ -41,7 +57,7 @@ export function RevenueChart({ data }: { data: RevenuePoint[] }) {
             tick={{ fill: "var(--text-muted)", fontSize: 11 }}
             axisLine={false}
             tickLine={false}
-            minTickGap={40}
+            minTickGap={28}
             dy={8}
           />
           <YAxis
@@ -58,7 +74,7 @@ export function RevenueChart({ data }: { data: RevenuePoint[] }) {
                 active={active}
                 label={label ? tickFmt(label as string) : undefined}
                 entries={(payload ?? []).map((p) => ({
-                  name: "Net revenue",
+                  name: "Sales",
                   value: p.value as number,
                   color: "var(--series-1)",
                 }))}
@@ -74,6 +90,19 @@ export function RevenueChart({ data }: { data: RevenuePoint[] }) {
             fill="url(#rev-fill)"
             activeDot={{ r: 4, strokeWidth: 2, stroke: "var(--surface-1)" }}
           />
+          {markers.map((m) =>
+            byDate.has(m.date) ? (
+              <ReferenceDot
+                key={m.date + m.label}
+                x={m.date}
+                y={byDate.get(m.date)!}
+                r={5}
+                fill={m.color}
+                stroke="var(--surface-1)"
+                strokeWidth={2}
+              />
+            ) : null,
+          )}
         </AreaChart>
       </ResponsiveContainer>
     </div>

@@ -1,62 +1,69 @@
-import type { Metadata } from "next";
+"use client";
+
+import * as React from "react";
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { useParams } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { KpiCard } from "@/components/kpi-card";
 import { Avatar } from "@/components/ui/avatar";
-import { Badge, StatusDot } from "@/components/ui/badge";
+import { Badge } from "@/components/ui/badge";
 import { RevenueChart } from "@/components/charts/revenue-chart";
 import { ShiftChart } from "@/components/charts/shift-chart";
 import { Leaderboard } from "@/components/leaderboard";
+import { EventList } from "@/components/events-ui";
+import { useData } from "@/lib/store";
 import {
-  allChatters,
+  availableDates,
+  avgPerFan,
   chatterModelBreakdown,
-  chatterShiftSplit,
-  getChatter,
-  recordsForChatter,
-  revenueByDay,
+  fanCVR,
+  rowsForChatter,
+  salesByDay,
+  salesByShift,
   sumTotals,
+  unlockRate,
 } from "@/lib/analytics";
+import { EVENT_META, eventDates, eventsForChatter } from "@/lib/events";
 
-export function generateStaticParams() {
-  return allChatters.map((c) => ({ id: c.id }));
-}
+export default function ChatterDetailPage() {
+  const params = useParams();
+  const id = decodeURIComponent(String(params.id));
+  const { dataset, chatters, models, events } = useData();
 
-export async function generateMetadata({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}): Promise<Metadata> {
-  const { id } = await params;
-  const c = getChatter(id);
-  return { title: c ? c.name : "Chatter" };
-}
-
-export default async function ChatterDetailPage({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
-  const { id } = await params;
-  const chatter = getChatter(id);
-  if (!chatter) notFound();
-
-  const recs = recordsForChatter(id);
+  const chatter = chatters.find((c) => c.id === id);
+  const recs = rowsForChatter(dataset.rows, id);
   const t = sumTotals(recs);
-  const unlockRate = t.ppvSent ? (t.ppvUnlocked / t.ppvSent) * 100 : 0;
-  const breakdown = chatterModelBreakdown(id);
 
+  const breakdown = chatterModelBreakdown(dataset.rows, id, models);
   const modelRows = breakdown.map(({ model, net }) => ({
     id: model.id,
     name: model.name,
-    avatar: model.avatar,
     subtitle: model.platform,
     net,
-    ppvUnlocked: 0,
-    messagesSent: 0,
     unlockRate: 0,
+    fansChatted: 0,
+    dmsSent: 0,
   }));
+
+  const chatterEvents = eventsForChatter(events, id);
+  const markerMap = eventDates(chatterEvents, availableDates(recs));
+  const markers = Array.from(markerMap.entries()).map(([date, evs]) => ({
+    date,
+    color: EVENT_META[evs[0].type].color,
+    label: evs[0].title,
+  }));
+
+  if (!chatter) {
+    return (
+      <div className="py-20 text-center text-muted">
+        Chatter not found.{" "}
+        <Link href="/chatters" className="text-accent hover:underline">
+          Back to chatters
+        </Link>
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -69,74 +76,75 @@ export default async function ChatterDetailPage({
 
       <Card className="mb-4 overflow-hidden">
         <div className="flex flex-col gap-4 p-6 sm:flex-row sm:items-center">
-          <Avatar src={chatter.avatar} name={chatter.name} size={64} />
+          <Avatar name={chatter.name} size={64} />
           <div className="flex-1">
-            <div className="flex items-center gap-3">
-              <h1 className="text-xl font-semibold tracking-tight">{chatter.name}</h1>
-              <StatusDot status={chatter.status} />
-            </div>
-            <p className="mt-1 text-sm text-secondary">
-              Team {chatter.team} · Hired {chatter.hiredAt}
-            </p>
+            <h1 className="text-xl font-semibold tracking-tight">{chatter.name}</h1>
+            <p className="mt-1 text-sm text-secondary">{chatter.group}</p>
           </div>
-          <div className="flex flex-wrap gap-2">
-            {chatter.languages.map((l) => (
-              <Badge key={l} variant="outline">
-                {l}
-              </Badge>
-            ))}
-            {chatter.defaultShifts.map((s) => (
-              <Badge key={s} variant="accent" className="capitalize">
-                {s}
-              </Badge>
-            ))}
-          </div>
+          <Badge variant="outline">{breakdown.length} models</Badge>
         </div>
       </Card>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <KpiCard index={0} label="Net revenue" value={t.net} icon="revenue" format="currency-compact" />
-        <KpiCard index={1} label="Unlock rate" value={unlockRate} icon="percent" format="percent" />
-        <KpiCard index={2} label="Messages sent" value={t.messagesSent} icon="messages" format="number-compact" />
-        <KpiCard index={3} label="Models worked" value={breakdown.length} icon="sparkles" format="int" />
+        <KpiCard index={0} label="Sales" value={t.sales} icon="revenue" format="currency-compact" />
+        <KpiCard index={1} label="Unlock rate" value={unlockRate(t)} icon="percent" format="percent" />
+        <KpiCard index={2} label="Fan CVR" value={fanCVR(t)} icon="sparkles" format="percent" />
+        <KpiCard index={3} label="Avg / paying fan" value={avgPerFan(t)} icon="users" format="currency-compact" />
       </div>
 
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-2">
           <CardHeader>
             <div>
-              <CardTitle>Revenue over time</CardTitle>
-              <CardDescription>Daily net revenue for {chatter.name}</CardDescription>
+              <CardTitle>Sales over time</CardTitle>
+              <CardDescription>Daily sales for {chatter.name}</CardDescription>
             </div>
           </CardHeader>
           <div className="px-3 pb-4 pt-2">
-            <RevenueChart data={revenueByDay(recs)} />
+            <RevenueChart data={salesByDay(recs)} markers={markers} />
           </div>
         </Card>
         <Card>
           <CardHeader>
             <div>
               <CardTitle>Shift split</CardTitle>
-              <CardDescription>Revenue by shift</CardDescription>
+              <CardDescription>Sales by shift</CardDescription>
             </div>
           </CardHeader>
           <div className="px-3 pb-4 pt-2">
-            <ShiftChart data={chatterShiftSplit(id)} />
+            <ShiftChart data={salesByShift(recs)} />
           </div>
         </Card>
       </div>
 
-      <Card className="mt-4">
-        <CardHeader>
-          <div>
-            <CardTitle>Models worked</CardTitle>
-            <CardDescription>Revenue contribution per model</CardDescription>
+      <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <div>
+              <CardTitle>Models worked</CardTitle>
+              <CardDescription>Sales contribution per model</CardDescription>
+            </div>
+          </CardHeader>
+          <div className="p-3">
+            <Leaderboard rows={modelRows} hrefBase="/models" metric="none" />
           </div>
-        </CardHeader>
-        <div className="p-3">
-          <Leaderboard rows={modelRows} hrefBase="/models" />
-        </div>
-      </Card>
+        </Card>
+        <Card>
+          <CardHeader>
+            <div>
+              <CardTitle>Events & context</CardTitle>
+              <CardDescription>Affecting this chatter</CardDescription>
+            </div>
+          </CardHeader>
+          <div className="p-3">
+            <EventList
+              events={chatterEvents}
+              emptyLabel="No events affecting this chatter."
+              scopeName={(ev) => (ev.modelId ? models.find((m) => m.id === ev.modelId)?.name ?? ev.modelId : "All models")}
+            />
+          </div>
+        </Card>
+      </div>
     </div>
   );
 }

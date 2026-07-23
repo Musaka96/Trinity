@@ -33,6 +33,23 @@ export function formatPct(value: number) {
   return `${sign}${value.toFixed(1)}%`;
 }
 
+export function formatDate(d: string) {
+  return new Date(d + "T00:00:00Z").toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "UTC",
+  });
+}
+
+export function formatDateRange(dates: string[]) {
+  if (dates.length === 0) return "No data";
+  const first = dates[0];
+  const last = dates[dates.length - 1];
+  if (first === last) return formatDate(first);
+  return `${formatDate(first)} – ${formatDate(last)}`;
+}
+
 export function initials(name: string) {
   return name
     .split(" ")

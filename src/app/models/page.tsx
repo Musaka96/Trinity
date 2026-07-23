@@ -1,49 +1,39 @@
-import type { Metadata } from "next";
+"use client";
+
+import * as React from "react";
 import { PageHeader } from "@/components/page-header";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ModelsTable, ModelRow } from "@/components/tables/models-table";
-import {
-  allModels,
-  recordsForModel,
-  recordsInLastDays,
-  sumTotals,
-} from "@/lib/analytics";
-
-export const metadata: Metadata = { title: "Models" };
+import { useData } from "@/lib/store";
+import { rowsForModel, sumTotals, unlockRate } from "@/lib/analytics";
 
 export default function ModelsPage() {
-  const last30 = recordsInLastDays(30);
+  const { dataset, models } = useData();
+  const rows = dataset.rows;
 
-  const rows: ModelRow[] = allModels.map((m) => {
-    const recs = recordsForModel(m.id, last30);
+  const data: ModelRow[] = models.map((m) => {
+    const recs = rowsForModel(rows, m.id);
     const t = sumTotals(recs);
-    const chatters = new Set(recs.map((r) => r.chatterId));
     return {
       id: m.id,
       name: m.name,
-      handle: m.handle,
-      avatar: m.avatar,
       platform: m.platform,
-      status: m.status,
-      subscribers: m.subscribers,
-      net: t.net,
-      unlockRate: t.ppvSent ? (t.ppvUnlocked / t.ppvSent) * 100 : 0,
-      chattersCount: chatters.size,
+      tier: m.tier,
+      sales: t.sales,
+      unlockRate: unlockRate(t),
+      fansChatted: t.fansChatted,
+      chattersCount: new Set(recs.map((r) => r.chatterId)).size,
     };
   });
 
-  const active = rows.filter((r) => r.status === "active").length;
-
   return (
     <div>
-      <PageHeader title="Models" description="Every model on the platform, with 30-day performance.">
-        <Badge variant="neutral">{rows.length} total</Badge>
-        <Badge variant="good">{active} active</Badge>
+      <PageHeader title="Models" description="Every creator on the platform, with performance for the loaded period.">
+        <Badge variant="neutral">{data.length} models</Badge>
       </PageHeader>
-
       <Card className="p-4">
-        <ModelsTable data={rows} />
+        <ModelsTable data={data} />
       </Card>
     </div>
   );

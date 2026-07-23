@@ -1,52 +1,39 @@
-import type { Metadata } from "next";
+"use client";
+
+import * as React from "react";
 import { PageHeader } from "@/components/page-header";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ChattersTable, ChatterRow } from "@/components/tables/chatters-table";
-import {
-  allChatters,
-  recordsForChatter,
-  recordsInLastDays,
-  sumTotals,
-} from "@/lib/analytics";
-
-export const metadata: Metadata = { title: "Chatters" };
+import { useData } from "@/lib/store";
+import { fanCVR, rowsForChatter, sumTotals, unlockRate } from "@/lib/analytics";
 
 export default function ChattersPage() {
-  const last30 = recordsInLastDays(30);
+  const { dataset, chatters } = useData();
+  const rows = dataset.rows;
 
-  const rows: ChatterRow[] = allChatters.map((c) => {
-    const recs = recordsForChatter(c.id, last30);
+  const data: ChatterRow[] = chatters.map((c) => {
+    const recs = rowsForChatter(rows, c.id);
     const t = sumTotals(recs);
-    const models = new Set(recs.map((r) => r.modelId));
     return {
       id: c.id,
       name: c.name,
-      avatar: c.avatar,
-      team: c.team,
-      status: c.status,
-      languages: c.languages,
-      net: t.net,
-      unlockRate: t.ppvSent ? (t.ppvUnlocked / t.ppvSent) * 100 : 0,
-      messagesSent: t.messagesSent,
-      modelsCount: models.size,
+      group: c.group,
+      sales: t.sales,
+      unlockRate: unlockRate(t),
+      cvr: fanCVR(t),
+      dmsSent: t.dmsSent,
+      modelsCount: new Set(recs.map((r) => r.creator)).size,
     };
   });
 
-  const active = rows.filter((r) => r.status === "active").length;
-
   return (
     <div>
-      <PageHeader
-        title="Chatters"
-        description="Everyone on the roster, with 30-day performance."
-      >
-        <Badge variant="neutral">{rows.length} total</Badge>
-        <Badge variant="good">{active} active</Badge>
+      <PageHeader title="Chatters" description="Everyone on the roster, with performance for the loaded period.">
+        <Badge variant="neutral">{data.length} chatters</Badge>
       </PageHeader>
-
       <Card className="p-4">
-        <ChattersTable data={rows} />
+        <ChattersTable data={data} />
       </Card>
     </div>
   );

@@ -1,28 +1,54 @@
 # Trinity — Sales Intelligence
 
-A web platform to browse sales statistics for online chatters and the models they
-work. Track revenue across **three daily shifts**, see who worked which models, and
-analyze performance by chatter, model, platform, and team. Built to import data
-from **inflow**.
+A web platform to browse sales statistics for online chatters and the models
+(creators) they work, built around the **infloww** export format. Track sales,
+PPV unlock rates, fan conversion, messaging output and more — per chatter, per
+model, per shift — and annotate the numbers with **events** (promotions,
+takeovers, bad days, holidays).
 
-> The app currently runs on deterministic **sample data** so the whole UI is
-> populated and demoable. Swap in real data by replacing `src/lib/mock-data.ts`
-> with the inflow import — every page reads through the selectors in
-> `src/lib/analytics.ts`, so nothing else has to change.
+> Ships pre-loaded with a real one-week infloww export as **sample data**. Import
+> your own export to replace/extend it — data is saved in the browser and
+> re-imports update existing rows.
 
 ## Features
 
-- **Dashboard** — KPI cards (net revenue, PPV unlock rate, messages, active chatters)
-  with animated counters and sparklines, revenue-over-time area chart, revenue-by-shift,
-  and top chatters / top models leaderboards.
-- **Chatters** — sortable, searchable roster with 30-day performance; per-chatter
-  detail page with revenue trend, shift split, and model breakdown.
-- **Models** — same, from the model side (platform, subscribers, chatters on the model).
-- **Shifts** — a day-by-day board of the three shifts showing who worked and which
-  models they covered, with a date switcher.
-- **Analytics** — stacked revenue composition by shift, platform donut, team performance.
-- **Import** — inflow upload/connect flow with the expected column → field mapping.
+- **Dashboard** — KPI cards (total sales, PPV unlock rate, fan conversion,
+  messages) with animated counters + sparklines, sales-over-time chart with
+  event markers, sales-by-shift, and top chatters / top models leaderboards.
+- **Chatters** — sortable, searchable roster; per-chatter detail with sales
+  trend, shift split, model breakdown, and the events affecting them.
+- **Models** — same, from the creator side (platform, VIP/Free tier, the
+  chatters working the account).
+- **Shifts** — a per-day board (04–12 · 12–20 · 20–04) of who worked, which
+  models they covered, and the day's events. Full-day exports show under "Full
+  day"; per-shift exports light up the three shifts automatically.
+- **Events** — create/edit/delete promotions, takeovers, bad days, holidays and
+  notes, scoped to a model / chatter / shift / date range. They propagate to
+  every view whose data they match.
+- **Analytics** — revenue composition (PPV vs tips), PPV delivery channels
+  (DM vs mass messages), and sales by account tier.
+- **Import** — parses the infloww `.xlsx`/`.csv` in the browser and **upserts**
+  rows (keyed by date + shift + chatter + creator), with a diff summary.
 - Dark / light themes, responsive layout, motion throughout.
+
+## The infloww data model
+
+The finest-grain infloww sheet ("Detailed breakdown") is one row per
+**(day, employee, creator)** — that's the canonical `StatRow`
+([src/lib/types.ts](src/lib/types.ts)). Chatters and Models are derived from the
+rows. The parser ([src/lib/import/parse-infloww.ts](src/lib/import/parse-infloww.ts))
+also reads the shift from the report's time window, so exporting per-shift reports
+segments the data into the three shifts with no extra work.
+
+## Data & persistence
+
+- **Seed**: the bundled export lives in `src/data/seed.json` and always loads.
+- **Imports & events**: saved to `localStorage`, merged over the seed at read
+  time, so they persist across reloads/sessions on that machine and re-imports
+  overwrite matching rows in place.
+- The store ([src/lib/store.tsx](src/lib/store.tsx)) is a thin, swappable
+  adapter — pointing its load/save at a server route (e.g. Vercel Postgres) makes
+  the dataset shared across your whole team **without changing any screens**.
 
 ## Tech stack
 
@@ -31,10 +57,8 @@ from **inflow**.
 | Framework  | Next.js 16 (App Router, React 19) |
 | Language   | TypeScript |
 | Styling    | Tailwind CSS v4 + a token-based design system |
-| Charts     | Recharts |
-| Tables     | TanStack Table |
-| Animation  | Motion (Framer Motion) |
-| Icons      | lucide-react |
+| Charts     | Recharts · Tables: TanStack Table · Animation: Motion |
+| Parsing    | SheetJS (`xlsx`) — in-browser import |
 | Theming    | next-themes |
 
 ## Getting started
@@ -53,34 +77,17 @@ npm run start   # serve the production build
 
 ## Deploying on Vercel
 
-This is a standard Next.js app and deploys on Vercel with zero configuration:
+Standard Next.js app — zero config:
 
-1. Push this repo to GitHub (already at `github.com/Musaka96/Trinity`).
-2. In Vercel, **New Project → Import** the `Trinity` repo.
-3. Accept the defaults (Framework preset: Next.js) and **Deploy**.
+1. Push to GitHub (already at `github.com/Musaka96/Trinity`).
+2. In Vercel: **New Project → Import** the repo → **Deploy**.
 
-Every push to `main` then triggers a new production deployment.
+Every push to `main` triggers a new production deployment.
 
-## Project structure
+## Regenerating the seed
 
+To rebuild `src/data/seed.json` from a new infloww file:
+
+```bash
+npx tsx scripts/generate-seed.ts <path-to-export.xlsx>
 ```
-src/
-  app/                 # routes (dashboard, chatters, models, shifts, analytics, import)
-  components/
-    ui/                # primitives: card, button, badge, avatar
-    charts/            # Recharts chart components
-    layout/            # app shell, sidebar, nav
-    tables/            # data-table column definitions
-  lib/
-    types.ts           # domain model (Chatter, Model, Shift, SalesRecord)
-    mock-data.ts       # seeded sample data — replace with the inflow import
-    analytics.ts       # pure selectors/aggregations the pages read from
-    utils.ts           # formatting + cn()
-```
-
-## Connecting inflow (next step)
-
-The `SalesRecord` shape in `src/lib/types.ts` mirrors an inflow-style row. To go
-live: parse the inflow export (or hit its API) into `SalesRecord[]`, `Chatter[]`,
-and `Model[]`, and export those from a module the way `mock-data.ts` does today.
-See the **Import** page for the column mapping.

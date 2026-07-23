@@ -6,20 +6,17 @@ import { ColumnDef } from "@tanstack/react-table";
 import { ArrowUpRight } from "lucide-react";
 import { DataTable } from "@/components/data-table";
 import { Avatar } from "@/components/ui/avatar";
-import { Badge, StatusDot } from "@/components/ui/badge";
-import { EntityStatus } from "@/lib/types";
+import { Badge } from "@/components/ui/badge";
 import { formatCurrency, formatNumber } from "@/lib/utils";
 
 export interface ChatterRow {
   id: string;
   name: string;
-  avatar: string;
-  team: string;
-  status: EntityStatus;
-  languages: string[];
-  net: number;
+  group: string;
+  sales: number;
   unlockRate: number;
-  messagesSent: number;
+  cvr: number;
+  dmsSent: number;
   modelsCount: number;
 }
 
@@ -28,43 +25,39 @@ const columns: ColumnDef<ChatterRow, unknown>[] = [
     accessorKey: "name",
     header: "Chatter",
     cell: ({ row }) => (
-      <Link href={`/chatters/${row.original.id}`} className="group flex items-center gap-3">
-        <Avatar src={row.original.avatar} name={row.original.name} size={34} />
+      <Link href={`/chatters/${encodeURIComponent(row.original.id)}`} className="group flex items-center gap-3">
+        <Avatar name={row.original.name} size={34} />
         <div>
           <p className="font-medium text-primary transition-colors group-hover:text-accent">
             {row.original.name}
           </p>
-          <p className="text-xs text-muted">Team {row.original.team}</p>
+          <p className="text-xs text-muted">{row.original.group}</p>
         </div>
       </Link>
     ),
   },
   {
-    accessorKey: "status",
-    header: "Status",
-    cell: ({ row }) => <StatusDot status={row.original.status} />,
-  },
-  {
-    accessorKey: "net",
-    header: "Net revenue",
+    accessorKey: "sales",
+    header: "Sales",
     cell: ({ row }) => (
-      <span className="font-medium tabular text-primary">{formatCurrency(row.original.net)}</span>
+      <span className="font-medium tabular text-primary">{formatCurrency(row.original.sales)}</span>
     ),
   },
   {
     accessorKey: "unlockRate",
     header: "Unlock rate",
-    cell: ({ row }) => (
-      <span className="tabular text-secondary">{row.original.unlockRate.toFixed(1)}%</span>
-    ),
+    cell: ({ row }) => <span className="tabular text-secondary">{row.original.unlockRate.toFixed(1)}%</span>,
   },
   {
-    accessorKey: "messagesSent",
+    accessorKey: "cvr",
+    header: "Fan CVR",
+    cell: ({ row }) => <span className="tabular text-secondary">{row.original.cvr.toFixed(1)}%</span>,
+  },
+  {
+    accessorKey: "dmsSent",
     header: "Messages",
     cell: ({ row }) => (
-      <span className="tabular text-secondary">
-        {formatNumber(row.original.messagesSent, { compact: true })}
-      </span>
+      <span className="tabular text-secondary">{formatNumber(row.original.dmsSent, { compact: true })}</span>
     ),
   },
   {
@@ -78,7 +71,7 @@ const columns: ColumnDef<ChatterRow, unknown>[] = [
     enableSorting: false,
     cell: ({ row }) => (
       <Link
-        href={`/chatters/${row.original.id}`}
+        href={`/chatters/${encodeURIComponent(row.original.id)}`}
         className="inline-flex text-muted transition-colors hover:text-accent"
         aria-label="View chatter"
       >
@@ -95,7 +88,7 @@ export function ChattersTable({ data }: { data: ChatterRow[] }) {
       data={data}
       searchPlaceholder="Search chatters or teams…"
       globalFilterFn={(row, q) =>
-        row.name.toLowerCase().includes(q) || row.team.toLowerCase().includes(q)
+        row.name.toLowerCase().includes(q) || row.group.toLowerCase().includes(q)
       }
     />
   );

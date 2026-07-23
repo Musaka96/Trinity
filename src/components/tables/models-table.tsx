@@ -6,20 +6,18 @@ import { ColumnDef } from "@tanstack/react-table";
 import { ArrowUpRight } from "lucide-react";
 import { DataTable } from "@/components/data-table";
 import { Avatar } from "@/components/ui/avatar";
-import { Badge, StatusDot } from "@/components/ui/badge";
-import { EntityStatus, Platform } from "@/lib/types";
+import { Badge } from "@/components/ui/badge";
+import { Platform } from "@/lib/types";
 import { formatCurrency, formatNumber } from "@/lib/utils";
 
 export interface ModelRow {
   id: string;
   name: string;
-  handle: string;
-  avatar: string;
   platform: Platform;
-  status: EntityStatus;
-  subscribers: number;
-  net: number;
+  tier: "VIP" | "Free" | "Standard";
+  sales: number;
   unlockRate: number;
+  fansChatted: number;
   chattersCount: number;
 }
 
@@ -28,48 +26,44 @@ const columns: ColumnDef<ModelRow, unknown>[] = [
     accessorKey: "name",
     header: "Model",
     cell: ({ row }) => (
-      <Link href={`/models/${row.original.id}`} className="group flex items-center gap-3">
-        <Avatar src={row.original.avatar} name={row.original.name} size={34} />
+      <Link href={`/models/${encodeURIComponent(row.original.id)}`} className="group flex items-center gap-3">
+        <Avatar name={row.original.name} size={34} />
         <div>
           <p className="font-medium text-primary transition-colors group-hover:text-accent">
             {row.original.name}
           </p>
-          <p className="text-xs text-muted">{row.original.handle}</p>
+          <p className="text-xs text-muted">{row.original.platform}</p>
         </div>
       </Link>
     ),
   },
   {
-    accessorKey: "platform",
-    header: "Platform",
-    cell: ({ row }) => <Badge variant="outline">{row.original.platform}</Badge>,
+    accessorKey: "tier",
+    header: "Tier",
+    cell: ({ row }) =>
+      row.original.tier === "Standard" ? (
+        <span className="text-muted">—</span>
+      ) : (
+        <Badge variant={row.original.tier === "VIP" ? "accent" : "neutral"}>{row.original.tier}</Badge>
+      ),
   },
   {
-    accessorKey: "status",
-    header: "Status",
-    cell: ({ row }) => <StatusDot status={row.original.status} />,
-  },
-  {
-    accessorKey: "subscribers",
-    header: "Subscribers",
+    accessorKey: "sales",
+    header: "Sales",
     cell: ({ row }) => (
-      <span className="tabular text-secondary">
-        {formatNumber(row.original.subscribers, { compact: true })}
-      </span>
-    ),
-  },
-  {
-    accessorKey: "net",
-    header: "Net revenue",
-    cell: ({ row }) => (
-      <span className="font-medium tabular text-primary">{formatCurrency(row.original.net)}</span>
+      <span className="font-medium tabular text-primary">{formatCurrency(row.original.sales)}</span>
     ),
   },
   {
     accessorKey: "unlockRate",
     header: "Unlock rate",
+    cell: ({ row }) => <span className="tabular text-secondary">{row.original.unlockRate.toFixed(1)}%</span>,
+  },
+  {
+    accessorKey: "fansChatted",
+    header: "Fans chatted",
     cell: ({ row }) => (
-      <span className="tabular text-secondary">{row.original.unlockRate.toFixed(1)}%</span>
+      <span className="tabular text-secondary">{formatNumber(row.original.fansChatted, { compact: true })}</span>
     ),
   },
   {
@@ -83,7 +77,7 @@ const columns: ColumnDef<ModelRow, unknown>[] = [
     enableSorting: false,
     cell: ({ row }) => (
       <Link
-        href={`/models/${row.original.id}`}
+        href={`/models/${encodeURIComponent(row.original.id)}`}
         className="inline-flex text-muted transition-colors hover:text-accent"
         aria-label="View model"
       >
@@ -98,11 +92,9 @@ export function ModelsTable({ data }: { data: ModelRow[] }) {
     <DataTable
       columns={columns}
       data={data}
-      searchPlaceholder="Search models or handles…"
+      searchPlaceholder="Search models or platforms…"
       globalFilterFn={(row, q) =>
-        row.name.toLowerCase().includes(q) ||
-        row.handle.toLowerCase().includes(q) ||
-        row.platform.toLowerCase().includes(q)
+        row.name.toLowerCase().includes(q) || row.platform.toLowerCase().includes(q)
       }
     />
   );

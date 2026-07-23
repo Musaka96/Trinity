@@ -23,7 +23,8 @@ interface Preview {
 }
 
 export function Importer() {
-  const { importRows } = useData();
+  const { importRows, mode } = useData();
+  const dest = mode === "server" ? "the shared database" : "this browser";
   const [status, setStatus] = React.useState<Status>("idle");
   const [dragging, setDragging] = React.useState(false);
   const [preview, setPreview] = React.useState<Preview | null>(null);
@@ -163,7 +164,7 @@ export function Importer() {
         <div className="flex items-start gap-3 rounded-lg border border-[var(--good)] bg-[var(--good-soft)] p-4">
           <CheckCircle2 className="mt-0.5 size-5 shrink-0 text-good" />
           <div className="flex-1">
-            <p className="text-sm font-medium text-primary">Import applied — saved to this browser</p>
+            <p className="text-sm font-medium text-primary">Import applied — saved to {dest}</p>
             <p className="mt-0.5 text-sm text-secondary">
               {result.added} new rows added, {result.updated} existing rows updated across{" "}
               {formatDateRange(result.dates)}. Re-importing a corrected export overwrites the same rows.

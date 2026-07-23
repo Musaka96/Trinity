@@ -34,7 +34,11 @@ export default function ImportPage() {
     <div>
       <PageHeader
         title="Import from infloww"
-        description="Upload an infloww export. Data is saved in this browser and re-imports update existing rows."
+        description={
+          isServer
+            ? "Upload an infloww export. Data is saved to the shared database and re-imports update existing rows."
+            : "Upload an infloww export. Data is saved in this browser and re-imports update existing rows."
+        }
       >
         <Badge variant={isServer ? "good" : "neutral"}>
           {mode === "loading" ? "Connecting…" : isServer ? "Shared database" : "This browser only"}

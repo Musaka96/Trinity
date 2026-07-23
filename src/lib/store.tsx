@@ -7,7 +7,8 @@ import { deriveChatters, deriveModels, emptyDataset, importDiff, mergeDataset } 
 import { TrinityEvent } from "./events";
 import { generateDemoTransactions } from "./demo-transactions";
 import { DEFAULT_TIERS, SpendTier } from "./tiers";
-import { EVENTS_KEY, IMPORTS_KEY, TIERS_KEY, TXNS_KEY, clear, load, save } from "./persistence";
+import { ChatterRating, chatterIdFromRatingKey, isRatingKey, ratingKey } from "./ratings";
+import { EVENTS_KEY, IMPORTS_KEY, RATINGS_KEY, TIERS_KEY, TXNS_KEY, clear, load, save } from "./persistence";
 import {
   fetchServerData,
   serverCreateEvent,
@@ -59,6 +60,10 @@ interface StoreValue {
   spendTiers: SpendTier[];
   setSpendTiers: (tiers: SpendTier[]) => Promise<void>;
 
+  /** Manual skill assessments, keyed by chatter id. */
+  ratings: Record<string, ChatterRating>;
+  setRating: (rating: ChatterRating) => Promise<void>;
+
   importRows: (rows: StatRow[]) => Promise<{ added: number; updated: number; dates: string[] }>;
   resetImports: () => Promise<void>;
 
@@ -94,6 +99,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const [localEvents, setLocalEvents] = React.useState<TrinityEvent[]>([]);
   const [localTxns, setLocalTxns] = React.useState<Transaction[]>([]);
   const [localTiers, setLocalTiers] = React.useState<SpendTier[]>(DEFAULT_TIERS);
+  const [localRatings, setLocalRatings] = React.useState<Record<string, ChatterRating>>({});
 
   React.useEffect(() => {
     let cancelled = false;
@@ -108,6 +114,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         setLocalEvents(load<TrinityEvent[]>(EVENTS_KEY, []));
         setLocalTxns(load<Transaction[]>(TXNS_KEY, []));
         setLocalTiers(load<SpendTier[]>(TIERS_KEY, DEFAULT_TIERS));
+        setLocalRatings(load<Record<string, ChatterRating>>(RATINGS_KEY, {}));
         setMode("local");
       }
       setReady(true);
@@ -183,6 +190,17 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     return localTiers.length ? localTiers : DEFAULT_TIERS;
   }, [isServer, server.settings, localTiers]);
 
+  // Ratings live as one settings row per chatter ("rating:<id>"), so two people
+  // rating different chatters never overwrite each other.
+  const ratings = React.useMemo<Record<string, ChatterRating>>(() => {
+    if (!isServer) return localRatings;
+    const out: Record<string, ChatterRating> = {};
+    for (const [key, value] of Object.entries(server.settings ?? {})) {
+      if (isRatingKey(key) && value) out[chatterIdFromRatingKey(key)] = value as ChatterRating;
+    }
+    return out;
+  }, [isServer, server.settings, localRatings]);
+
   const refetch = React.useCallback(async () => {
     const data = await fetchServerData();
     if (data) setServer(data);
@@ -237,6 +255,24 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       }
       setLocalTiers(tiers);
       save(TIERS_KEY, tiers);
+    },
+    [isServer, refetch],
+  );
+
+  const setRating = React.useCallback(
+    async (rating: ChatterRating) => {
+      const next = { ...rating, updatedAt: new Date().toISOString() };
+      if (isServer) {
+        setServer((s) => ({ ...s, settings: { ...s.settings, [ratingKey(next.chatterId)]: next } }));
+        const okRes = await serverSaveSetting(ratingKey(next.chatterId), next);
+        if (!okRes) await refetch();
+        return;
+      }
+      setLocalRatings((prev) => {
+        const merged = { ...prev, [next.chatterId]: next };
+        save(RATINGS_KEY, merged);
+        return merged;
+      });
     },
     [isServer, refetch],
   );
@@ -317,6 +353,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     importTransactions,
     spendTiers,
     setSpendTiers,
+    ratings,
+    setRating,
     importRows,
     resetImports,
     addEvent,

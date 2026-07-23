@@ -8,9 +8,10 @@ import { ChattersTable, ChatterRow } from "@/components/tables/chatters-table";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { useData } from "@/lib/store";
 import { fanCVR, rowsForChatter, sumTotals, unlockRate } from "@/lib/analytics";
+import { overallScore } from "@/lib/ratings";
 
 export default function ChattersPage() {
-  const { rowsInRange, chatters } = useData();
+  const { rowsInRange, chatters, ratings } = useData();
   const rows = rowsInRange;
 
   const data: ChatterRow[] = chatters.map((c) => {
@@ -25,6 +26,7 @@ export default function ChattersPage() {
       cvr: fanCVR(t),
       dmsSent: t.dmsSent,
       modelsCount: new Set(recs.map((r) => r.creator)).size,
+      rating: overallScore(ratings[c.id]),
     };
   });
 

@@ -7,6 +7,8 @@ import { ArrowUpRight } from "lucide-react";
 import { DataTable } from "@/components/data-table";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
+import { ScorePill } from "@/components/star-rating";
+import { scoreColor } from "@/lib/ratings";
 import { formatCurrency, formatNumber } from "@/lib/utils";
 
 export interface ChatterRow {
@@ -18,6 +20,7 @@ export interface ChatterRow {
   cvr: number;
   dmsSent: number;
   modelsCount: number;
+  rating: number | null;
 }
 
 const columns: ColumnDef<ChatterRow, unknown>[] = [
@@ -64,6 +67,17 @@ const columns: ColumnDef<ChatterRow, unknown>[] = [
     accessorKey: "modelsCount",
     header: "Models",
     cell: ({ row }) => <Badge variant="outline">{row.original.modelsCount}</Badge>,
+  },
+  {
+    accessorKey: "rating",
+    header: "Rating",
+    sortUndefined: "last",
+    cell: ({ row }) => (
+      <ScorePill
+        score={row.original.rating}
+        color={row.original.rating !== null ? scoreColor(row.original.rating) : undefined}
+      />
+    ),
   },
   {
     id: "go",

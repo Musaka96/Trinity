@@ -15,6 +15,7 @@ import { EventList } from "@/components/events-ui";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { RankedList } from "@/components/ranked-list";
 import { TierBadge } from "@/components/tier-badge";
+import { SkillAssessment } from "@/components/skill-assessment";
 import { useData } from "@/lib/store";
 import { spendByShift, topSpenders, txnsForChatter } from "@/lib/transactions";
 import { bucketByTier, sortTiers, tierFor } from "@/lib/tiers";
@@ -139,6 +140,10 @@ export default function ChatterDetailPage() {
             <ShiftChart data={chatterTxns.length ? spendByShift(chatterTxns) : salesByShift(recs)} />
           </div>
         </Card>
+      </div>
+
+      <div className="mt-4">
+        <SkillAssessment chatterId={id} chatterName={chatter.name} />
       </div>
 
       {chatterTxns.length > 0 && (

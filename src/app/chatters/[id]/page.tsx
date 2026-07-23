@@ -12,6 +12,7 @@ import { RevenueChart } from "@/components/charts/revenue-chart";
 import { ShiftChart } from "@/components/charts/shift-chart";
 import { Leaderboard } from "@/components/leaderboard";
 import { EventList } from "@/components/events-ui";
+import { DateRangePicker } from "@/components/date-range-picker";
 import { useData } from "@/lib/store";
 import {
   availableDates,
@@ -29,13 +30,13 @@ import { EVENT_META, eventDates, eventsForChatter } from "@/lib/events";
 export default function ChatterDetailPage() {
   const params = useParams();
   const id = decodeURIComponent(String(params.id));
-  const { dataset, chatters, models, events } = useData();
+  const { rowsInRange, chatters, models, events } = useData();
 
   const chatter = chatters.find((c) => c.id === id);
-  const recs = rowsForChatter(dataset.rows, id);
+  const recs = rowsForChatter(rowsInRange, id);
   const t = sumTotals(recs);
 
-  const breakdown = chatterModelBreakdown(dataset.rows, id, models);
+  const breakdown = chatterModelBreakdown(rowsInRange, id, models);
   const modelRows = breakdown.map(({ model, net }) => ({
     id: model.id,
     name: model.name,
@@ -67,12 +68,15 @@ export default function ChatterDetailPage() {
 
   return (
     <div>
-      <Link
-        href="/chatters"
-        className="mb-5 inline-flex items-center gap-1.5 text-sm text-secondary transition-colors hover:text-primary"
-      >
-        <ArrowLeft className="size-4" /> Back to chatters
-      </Link>
+      <div className="mb-5 flex items-center justify-between gap-3">
+        <Link
+          href="/chatters"
+          className="inline-flex items-center gap-1.5 text-sm text-secondary transition-colors hover:text-primary"
+        >
+          <ArrowLeft className="size-4" /> Back to chatters
+        </Link>
+        <DateRangePicker />
+      </div>
 
       <Card className="mb-4 overflow-hidden">
         <div className="flex flex-col gap-4 p-6 sm:flex-row sm:items-center">

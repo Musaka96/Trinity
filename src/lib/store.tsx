@@ -19,6 +19,11 @@ const seed = seedJson as unknown as Dataset;
 
 export type StorageMode = "loading" | "server" | "local";
 
+export interface DateRange {
+  from: string; // YYYY-MM-DD inclusive
+  to: string; // YYYY-MM-DD inclusive
+}
+
 interface StoreValue {
   ready: boolean;
   mode: StorageMode;
@@ -28,6 +33,14 @@ interface StoreValue {
   events: TrinityEvent[];
   lastUpdated: string | null;
   importCount: number;
+
+  /** Active date filter. null = all dates. */
+  range: DateRange | null;
+  /** Min/max dates present in the data. null when there is no data. */
+  bounds: DateRange | null;
+  /** dataset.rows filtered by the active range. */
+  rowsInRange: StatRow[];
+  setRange: (range: DateRange | null) => void;
 
   importRows: (rows: StatRow[]) => Promise<{ added: number; updated: number; dates: string[] }>;
   resetImports: () => Promise<void>;
@@ -92,6 +105,23 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const models = React.useMemo(() => deriveModels(dataset.rows), [dataset]);
   const lastUpdated = isServer ? null : imports.updatedAt ?? seed.updatedAt;
   const importCount = isServer ? server.rows.length : imports.rows.length;
+
+  const [range, setRange] = React.useState<DateRange | null>(null);
+
+  const bounds = React.useMemo<DateRange | null>(() => {
+    let min: string | null = null;
+    let max: string | null = null;
+    for (const r of dataset.rows) {
+      if (min === null || r.date < min) min = r.date;
+      if (max === null || r.date > max) max = r.date;
+    }
+    return min && max ? { from: min, to: max } : null;
+  }, [dataset]);
+
+  const rowsInRange = React.useMemo(
+    () => (range ? dataset.rows.filter((r) => r.date >= range.from && r.date <= range.to) : dataset.rows),
+    [dataset, range],
+  );
 
   const refetch = React.useCallback(async () => {
     const data = await fetchServerData();
@@ -180,6 +210,10 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     events,
     lastUpdated,
     importCount,
+    range,
+    bounds,
+    rowsInRange,
+    setRange,
     importRows,
     resetImports,
     addEvent,

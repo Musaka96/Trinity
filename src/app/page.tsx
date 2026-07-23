@@ -10,6 +10,7 @@ import { ShiftChart } from "@/components/charts/shift-chart";
 import { Leaderboard } from "@/components/leaderboard";
 import { Badge } from "@/components/ui/badge";
 import { EventList } from "@/components/events-ui";
+import { DateRangePicker } from "@/components/date-range-picker";
 import { useData } from "@/lib/store";
 import {
   availableDates,
@@ -22,11 +23,11 @@ import {
   unlockRate,
 } from "@/lib/analytics";
 import { EVENT_META, eventDates } from "@/lib/events";
-import { formatCurrency, formatDateRange } from "@/lib/utils";
+import { formatCurrency } from "@/lib/utils";
 
 export default function DashboardPage() {
-  const { dataset, chatters, models, events } = useData();
-  const rows = dataset.rows;
+  const { rowsInRange, chatters, models, events } = useData();
+  const rows = rowsInRange;
 
   const totals = sumTotals(rows);
   const daily = salesByDay(rows);
@@ -48,7 +49,7 @@ export default function DashboardPage() {
         title="Dashboard"
         description="Sales performance across all chatters, models, and shifts."
       >
-        <Badge variant="accent">{formatDateRange(dates)}</Badge>
+        <DateRangePicker />
       </PageHeader>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">

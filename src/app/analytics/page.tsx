@@ -3,9 +3,9 @@
 import * as React from "react";
 import { PageHeader } from "@/components/page-header";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { RevenueChart } from "@/components/charts/revenue-chart";
 import { DonutChart } from "@/components/charts/donut-chart";
+import { DateRangePicker } from "@/components/date-range-picker";
 import { useData } from "@/lib/store";
 import {
   availableDates,
@@ -16,11 +16,11 @@ import {
   sumTotals,
 } from "@/lib/analytics";
 import { EVENT_META, eventDates } from "@/lib/events";
-import { formatCurrency, formatDateRange } from "@/lib/utils";
+import { formatCurrency } from "@/lib/utils";
 
 export default function AnalyticsPage() {
-  const { dataset, events } = useData();
-  const rows = dataset.rows;
+  const { rowsInRange, events } = useData();
+  const rows = rowsInRange;
   const totals = sumTotals(rows);
   const dates = availableDates(rows);
 
@@ -37,7 +37,7 @@ export default function AnalyticsPage() {
   return (
     <div>
       <PageHeader title="Analytics" description="Where the revenue comes from — composition, channels, and tiers.">
-        <Badge variant="accent">{formatDateRange(dates)}</Badge>
+        <DateRangePicker />
       </PageHeader>
 
       <Card>

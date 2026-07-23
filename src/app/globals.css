@@ -1,0 +1,172 @@
+@import "tailwindcss";
+
+/* ------------------------------------------------------------------ *
+ * Trinity — design tokens
+ * Dark-first analytics platform. Chart series use the validated
+ * dataviz categorical palette; brand chrome uses an indigo accent.
+ * ------------------------------------------------------------------ */
+
+:root {
+  color-scheme: dark;
+
+  /* Surfaces */
+  --plane: #08090c;          /* page background */
+  --surface-1: #0e1015;      /* cards */
+  --surface-2: #151821;      /* raised / hover */
+  --surface-3: #1c202b;      /* inputs, wells */
+
+  /* Ink */
+  --text-primary: #f4f5f7;
+  --text-secondary: #a7adba;
+  --text-muted: #6b7280;
+
+  /* Lines */
+  --border: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.14);
+  --grid: #20242e;
+
+  /* Brand accent — indigo/violet */
+  --accent: #6d5cff;
+  --accent-hover: #7d6dff;
+  --accent-soft: rgba(109, 92, 255, 0.14);
+  --accent-ring: rgba(109, 92, 255, 0.45);
+
+  /* Status */
+  --good: #22c55e;
+  --good-soft: rgba(34, 197, 94, 0.14);
+  --warning: #fab219;
+  --warning-soft: rgba(250, 178, 25, 0.14);
+  --critical: #ef4444;
+  --critical-soft: rgba(239, 68, 68, 0.14);
+
+  /* Chart series (validated dataviz dark palette) */
+  --series-1: #3987e5;
+  --series-2: #d95926;
+  --series-3: #199e70;
+  --series-4: #c98500;
+  --series-5: #d55181;
+  --series-6: #008300;
+  --series-7: #9085e9;
+  --series-8: #e66767;
+
+  --radius: 14px;
+  --font-sans: var(--font-geist-sans), system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+}
+
+/* Light theme override */
+:root[data-theme="light"] {
+  color-scheme: light;
+  --plane: #f7f8fa;
+  --surface-1: #ffffff;
+  --surface-2: #f2f3f7;
+  --surface-3: #eceef3;
+  --text-primary: #0b0d12;
+  --text-secondary: #4b5563;
+  --text-muted: #8a919e;
+  --border: rgba(11, 13, 18, 0.09);
+  --border-strong: rgba(11, 13, 18, 0.16);
+  --grid: #e6e8ee;
+  --accent: #5b46f0;
+  --accent-hover: #4d38e0;
+  --accent-soft: rgba(91, 70, 240, 0.10);
+  --series-1: #2a78d6;
+  --series-2: #eb6834;
+  --series-3: #1baf7a;
+  --series-4: #eda100;
+  --series-5: #e87ba4;
+  --series-6: #008300;
+  --series-7: #4a3aa7;
+  --series-8: #e34948;
+}
+
+@theme inline {
+  --color-plane: var(--plane);
+  --color-surface-1: var(--surface-1);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --color-primary: var(--text-primary);
+  --color-secondary: var(--text-secondary);
+  --color-muted: var(--text-muted);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-grid: var(--grid);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-good: var(--good);
+  --color-warning: var(--warning);
+  --color-critical: var(--critical);
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+  --radius-card: var(--radius);
+}
+
+* {
+  border-color: var(--border);
+}
+
+html {
+  scrollbar-gutter: stable;
+}
+
+body {
+  background: var(--plane);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Ambient brand glow behind the app shell */
+.app-aurora::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background:
+    radial-gradient(60rem 40rem at 12% -8%, rgba(109, 92, 255, 0.14), transparent 60%),
+    radial-gradient(50rem 40rem at 100% 0%, rgba(57, 135, 229, 0.10), transparent 55%);
+}
+
+/* Utilities */
+.text-balance { text-wrap: balance; }
+
+.card-surface {
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.gradient-text {
+  background: linear-gradient(120deg, var(--text-primary), var(--accent) 140%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.tabular { font-variant-numeric: tabular-nums; }
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: var(--surface-3);
+  border-radius: 8px;
+  border: 2px solid var(--plane);
+}
+::-webkit-scrollbar-thumb:hover { background: var(--border-strong); }
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.skeleton {
+  background: linear-gradient(90deg, var(--surface-2) 25%, var(--surface-3) 37%, var(--surface-2) 63%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s ease infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}

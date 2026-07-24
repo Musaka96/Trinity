@@ -2,6 +2,19 @@ import { SHIFTS, ShiftId, Transaction } from "./types";
 
 /** Pure selectors over Transaction[] — the fan/spender dimension. */
 
+/** Chatter id used for sales with no assigned employee (subscriptions, tips…). */
+export const UNASSIGNED_CHATTER_ID = "unassigned";
+
+export const isUnassigned = (t: Transaction) => t.chatterId === UNASSIGNED_CHATTER_ID;
+
+/** Split a set into assigned-to-a-chatter vs unassigned. */
+export function partitionUnassigned(txns: Transaction[]) {
+  const assigned: Transaction[] = [];
+  const unassigned: Transaction[] = [];
+  for (const t of txns) (isUnassigned(t) ? unassigned : assigned).push(t);
+  return { assigned, unassigned };
+}
+
 // ---- MMPPV / decimal classification -------------------------------------
 
 /** The cents portion of an amount, 0–99, robust to float error and sign. */

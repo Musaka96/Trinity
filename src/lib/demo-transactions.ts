@@ -1,4 +1,5 @@
 import { Chatter, Model, ShiftId, Transaction, shiftFromRange } from "./types";
+import { UNASSIGNED_CHATTER_ID } from "./transactions";
 
 /**
  * TEMPORARY demo data for the transaction-level report.
@@ -124,6 +125,8 @@ export function generateDemoTransactions({ chatters, models, dates }: DemoInput)
   for (let i = 0; i < TARGET; i++) {
     const fan = fans[weightedIndex(rng, fans.length, fans.length > 100 ? 1.5 : 1)];
     const model = models[fan.modelIdx];
+    // ~14% of sales (subscriptions, tips) have no assigned employee.
+    const unassigned = rng() < 0.14;
     const chatter = chatters[weightedIndex(rng, chatters.length, 2.1)];
     const date = dates[Math.floor(rng() * dates.length)];
     const hour = hourFor(rng);
@@ -136,9 +139,9 @@ export function generateDemoTransactions({ chatters, models, dates }: DemoInput)
       datetime,
       date,
       shift,
-      chatterId: chatter.id,
-      chatterName: chatter.name,
-      group: chatter.group,
+      chatterId: unassigned ? UNASSIGNED_CHATTER_ID : chatter.id,
+      chatterName: unassigned ? "Unassigned" : chatter.name,
+      group: unassigned ? "" : chatter.group,
       creator: model.id,
       platform: model.platform,
       tier: model.tier,

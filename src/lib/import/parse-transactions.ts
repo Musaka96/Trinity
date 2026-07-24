@@ -1,6 +1,7 @@
 import * as XLSX from "xlsx";
 import { ShiftId, Transaction, shiftFromRange } from "@/lib/types";
 import { cleanCreator } from "./parse-infloww";
+import { UNASSIGNED_CHATTER_ID } from "@/lib/transactions";
 
 /**
  * Parser for the transaction-level infloww report ("Sales record"):
@@ -166,7 +167,7 @@ export function parseTransactionsFromWorkbook(wb: XLSX.WorkBook): TransactionPar
 
       // Subscriptions/tips often have no employee — bucket under "Unassigned".
       const attributed = email || slug(chatterName);
-      const chatterId = attributed || "unassigned";
+      const chatterId = attributed || UNASSIGNED_CHATTER_ID;
       const displayName = chatterName || (attributed ? "Unknown" : "Unassigned");
       const shift: ShiftId = shiftFromRange(when.hour, false);
 

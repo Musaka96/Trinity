@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { ArrowLeft, Megaphone } from "lucide-react";
+import { ArrowLeft, Megaphone, UserX } from "lucide-react";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { KpiCard } from "@/components/kpi-card";
 import { Avatar } from "@/components/ui/avatar";
@@ -15,7 +15,14 @@ import { EventList } from "@/components/events-ui";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { RankedList } from "@/components/ranked-list";
 import { useData } from "@/lib/store";
-import { chattersRanked, partitionMMPPV, spendByShift, topSpenders, txnsForModel } from "@/lib/transactions";
+import {
+  chattersRanked,
+  partitionMMPPV,
+  partitionUnassigned,
+  spendByShift,
+  topSpenders,
+  txnsForModel,
+} from "@/lib/transactions";
 import {
   availableDates,
   avgPerFan,
@@ -43,13 +50,18 @@ export default function ModelDetailPage() {
 
   // Transaction-level data (when present) gives real shift timing and spenders.
   const modelTxns = txnsForModel(transactionsInRange, id);
+  const modelTxnTotal = modelTxns.reduce((a, t) => a + t.earnings, 0);
   const spenders = topSpenders(modelTxns, 10);
-  const txnChatters = chattersRanked(modelTxns, 10);
+
+  // Sales with no assigned employee (subscriptions, tips) are tallied separately.
+  const { assigned: assignedTxns, unassigned: unassignedTxns } = partitionUnassigned(modelTxns);
+  const txnChatters = chattersRanked(assignedTxns, 10);
+  const unassignedSales = unassignedTxns.reduce((a, t) => a + t.earnings, 0);
+  const unassignedShare = modelTxnTotal ? (unassignedSales / modelTxnTotal) * 100 : 0;
+
   const { mmppv: modelMmppv } = partitionMMPPV(modelTxns, mmppvDecimals);
   const mmppvSales = modelMmppv.reduce((a, t) => a + t.earnings, 0);
-  const mmppvShare = modelTxns.length
-    ? (mmppvSales / modelTxns.reduce((a, t) => a + t.earnings, 0)) * 100
-    : 0;
+  const mmppvShare = modelTxnTotal ? (mmppvSales / modelTxnTotal) * 100 : 0;
   const chatterRows = breakdown.map(({ chatter, net }) => ({
     id: chatter.id,
     name: chatter.name,
@@ -142,31 +154,53 @@ export default function ModelDetailPage() {
       </div>
 
       {modelTxns.length > 0 && (
-        <Card className="mt-4">
-          <div className="flex flex-wrap items-center justify-between gap-3 p-5">
-            <div className="flex items-center gap-3">
-              <span className="grid size-10 place-items-center rounded-lg bg-[var(--accent-soft)] text-accent">
-                <Megaphone className="size-5" />
-              </span>
-              <div>
-                <p className="text-sm font-medium text-primary">Sales from MMPPV</p>
-                <p className="text-xs text-muted">
-                  {mmppvDecimals.length
-                    ? `Sales ending in ${mmppvDecimals.map((c) => `.${String(c).padStart(2, "0")}`).join(", ")}`
-                    : "No MMPPV decimals set"}
-                  {" · "}
-                  <Link href="/settings" className="text-accent hover:underline">
-                    configure
-                  </Link>
-                </p>
+        <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Card>
+            <div className="flex items-center justify-between gap-3 p-5">
+              <div className="flex items-center gap-3">
+                <span className="grid size-10 place-items-center rounded-lg bg-[var(--accent-soft)] text-accent">
+                  <Megaphone className="size-5" />
+                </span>
+                <div>
+                  <p className="text-sm font-medium text-primary">Sales from MMPPV</p>
+                  <p className="text-xs text-muted">
+                    {mmppvDecimals.length
+                      ? `Ending in ${mmppvDecimals.map((c) => `.${String(c).padStart(2, "0")}`).join(", ")}`
+                      : "No decimals set"}
+                    {" · "}
+                    <Link href="/settings" className="text-accent hover:underline">
+                      configure
+                    </Link>
+                  </p>
+                </div>
+              </div>
+              <div className="text-right">
+                <p className="text-xl font-semibold tabular text-primary">{formatCurrency(mmppvSales)}</p>
+                <p className="text-xs text-muted">{mmppvShare.toFixed(1)}%</p>
               </div>
             </div>
-            <div className="text-right">
-              <p className="text-2xl font-semibold tabular text-primary">{formatCurrency(mmppvSales)}</p>
-              <p className="text-xs text-muted">{mmppvShare.toFixed(1)}% of transaction sales</p>
+          </Card>
+
+          <Card>
+            <div className="flex items-center justify-between gap-3 p-5">
+              <div className="flex items-center gap-3">
+                <span className="grid size-10 place-items-center rounded-lg bg-surface-3 text-secondary">
+                  <UserX className="size-5" />
+                </span>
+                <div>
+                  <p className="text-sm font-medium text-primary">Unassigned sales</p>
+                  <p className="text-xs text-muted">
+                    No chatter (subscriptions, tips) · {unassignedTxns.length} sales
+                  </p>
+                </div>
+              </div>
+              <div className="text-right">
+                <p className="text-xl font-semibold tabular text-primary">{formatCurrency(unassignedSales)}</p>
+                <p className="text-xs text-muted">{unassignedShare.toFixed(1)}%</p>
+              </div>
             </div>
-          </div>
-        </Card>
+          </Card>
+        </div>
       )}
 
       {modelTxns.length > 0 && (

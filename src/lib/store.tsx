@@ -14,7 +14,17 @@ import {
   normalizeRating,
   ratingKey,
 } from "./ratings";
-import { EVENTS_KEY, IMPORTS_KEY, RATINGS_KEY, TIERS_KEY, TXNS_KEY, clear, load, save } from "./persistence";
+import {
+  EVENTS_KEY,
+  IMPORTS_KEY,
+  MMPPV_KEY,
+  RATINGS_KEY,
+  TIERS_KEY,
+  TXNS_KEY,
+  clear,
+  load,
+  save,
+} from "./persistence";
 import {
   fetchServerData,
   serverCreateEvent,
@@ -27,6 +37,7 @@ import {
 } from "./api";
 
 const TIERS_SETTING = "spend_tiers";
+const MMPPV_SETTING = "mmppv_decimals";
 
 const seed = seedJson as unknown as Dataset;
 
@@ -71,6 +82,10 @@ interface StoreValue {
   ratings: Record<string, ChatterRating>;
   /** Resolves false when the write could not be persisted. */
   setRating: (rating: ChatterRating) => Promise<boolean>;
+
+  /** Cents (0–99) that mark a sale as MMPPV: excluded from chatter stats. */
+  mmppvDecimals: number[];
+  setMmppvDecimals: (decimals: number[]) => Promise<boolean>;
 
   importRows: (rows: StatRow[]) => Promise<{ added: number; updated: number; dates: string[] }>;
   resetImports: () => Promise<void>;
@@ -123,18 +138,30 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const [localTxns, setLocalTxns] = React.useState<Transaction[]>([]);
   const [localTiers, setLocalTiers] = React.useState<SpendTier[]>(DEFAULT_TIERS);
   const [localRatings, setLocalRatings] = React.useState<Record<string, ChatterRating>>({});
+  const [localMmppv, setLocalMmppv] = React.useState<number[]>([]);
 
   /**
    * Mode has to be settled before any write, otherwise a save fired while the
    * initial fetch is still in flight would land in localStorage and then be
-   * invisible once we switch to the shared database. Writers await this.
+   * invisible once we switch to the shared database. Writers await `initRef`.
+   *
+   * The deferred is created synchronously (pure — no state update), and the
+   * effect below resolves it after the initial load, so the actual fetch and
+   * its setState calls run in an effect rather than during render.
    */
-  const initRef = React.useRef<Promise<boolean> | null>(null);
   const modeRef = React.useRef<StorageMode>("loading");
+  const initRef = React.useRef<{ promise: Promise<boolean>; resolve: (v: boolean) => void } | null>(null);
+  if (initRef.current === null) {
+    let resolve!: (v: boolean) => void;
+    const promise = new Promise<boolean>((r) => (resolve = r));
+    initRef.current = { promise, resolve };
+  }
 
-  if (initRef.current === null && typeof window !== "undefined") {
-    initRef.current = (async () => {
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
       const data = await fetchServerData();
+      if (cancelled) return;
       if (data) {
         setServer(data);
         modeRef.current = "server";
@@ -145,18 +172,22 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         setLocalTxns(load<Transaction[]>(TXNS_KEY, []));
         setLocalTiers(load<SpendTier[]>(TIERS_KEY, DEFAULT_TIERS));
         setLocalRatings(load<Record<string, ChatterRating>>(RATINGS_KEY, {}));
+        setLocalMmppv(load<number[]>(MMPPV_KEY, []));
         modeRef.current = "local";
         setMode("local");
       }
       setReady(true);
-      return modeRef.current === "server";
+      initRef.current?.resolve(modeRef.current === "server");
     })();
-  }
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   /** Resolves to true when the shared database is the active target. */
   const resolveServerMode = React.useCallback(async () => {
     if (modeRef.current !== "loading") return modeRef.current === "server";
-    return (await initRef.current) ?? false;
+    return (await initRef.current?.promise) ?? false;
   }, []);
 
   const isServer = mode === "server";
@@ -244,6 +275,11 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     return out;
   }, [isServer, server.settings, localRatings]);
 
+  const mmppvDecimals = React.useMemo<number[]>(() => {
+    const raw = isServer ? coerceValue(server.settings?.[MMPPV_SETTING]) : localMmppv;
+    return Array.isArray(raw) ? (raw as number[]).filter((n) => Number.isInteger(n) && n >= 0 && n <= 99) : [];
+  }, [isServer, server.settings, localMmppv]);
+
   const refetch = React.useCallback(async () => {
     const data = await fetchServerData();
     if (data) setServer(data);
@@ -302,6 +338,28 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       }
       setLocalTiers(tiers);
       save(TIERS_KEY, tiers);
+      return true;
+    },
+    [resolveServerMode, refetch],
+  );
+
+  const setMmppvDecimals = React.useCallback(
+    async (decimals: number[]) => {
+      const clean = Array.from(new Set(decimals.filter((n) => Number.isInteger(n) && n >= 0 && n <= 99))).sort(
+        (a, b) => a - b,
+      );
+      const useServer = await resolveServerMode();
+      if (useServer) {
+        const okRes = await serverSaveSetting(MMPPV_SETTING, clean);
+        if (!okRes) {
+          await refetch();
+          return false;
+        }
+        setServer((s) => ({ ...s, settings: { ...s.settings, [MMPPV_SETTING]: clean } }));
+        return true;
+      }
+      setLocalMmppv(clean);
+      save(MMPPV_KEY, clean);
       return true;
     },
     [resolveServerMode, refetch],
@@ -409,6 +467,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     setSpendTiers,
     ratings,
     setRating,
+    mmppvDecimals,
+    setMmppvDecimals,
     importRows,
     resetImports,
     addEvent,

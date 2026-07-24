@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Megaphone } from "lucide-react";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { KpiCard } from "@/components/kpi-card";
 import { Avatar } from "@/components/ui/avatar";
@@ -15,7 +15,7 @@ import { EventList } from "@/components/events-ui";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { RankedList } from "@/components/ranked-list";
 import { useData } from "@/lib/store";
-import { chattersRanked, spendByShift, topSpenders, txnsForModel } from "@/lib/transactions";
+import { chattersRanked, partitionMMPPV, spendByShift, topSpenders, txnsForModel } from "@/lib/transactions";
 import {
   availableDates,
   avgPerFan,
@@ -28,11 +28,12 @@ import {
   unlockRate,
 } from "@/lib/analytics";
 import { EVENT_META, eventDates, eventsForModel } from "@/lib/events";
+import { formatCurrency } from "@/lib/utils";
 
 export default function ModelDetailPage() {
   const params = useParams();
   const id = decodeURIComponent(String(params.id));
-  const { rowsInRange, chatters, models, events, transactionsInRange } = useData();
+  const { rowsInRange, chatters, models, events, transactionsInRange, mmppvDecimals } = useData();
 
   const model = models.find((m) => m.id === id);
   const recs = rowsForModel(rowsInRange, id);
@@ -44,6 +45,11 @@ export default function ModelDetailPage() {
   const modelTxns = txnsForModel(transactionsInRange, id);
   const spenders = topSpenders(modelTxns, 10);
   const txnChatters = chattersRanked(modelTxns, 10);
+  const { mmppv: modelMmppv } = partitionMMPPV(modelTxns, mmppvDecimals);
+  const mmppvSales = modelMmppv.reduce((a, t) => a + t.earnings, 0);
+  const mmppvShare = modelTxns.length
+    ? (mmppvSales / modelTxns.reduce((a, t) => a + t.earnings, 0)) * 100
+    : 0;
   const chatterRows = breakdown.map(({ chatter, net }) => ({
     id: chatter.id,
     name: chatter.name,
@@ -134,6 +140,34 @@ export default function ModelDetailPage() {
           </div>
         </Card>
       </div>
+
+      {modelTxns.length > 0 && (
+        <Card className="mt-4">
+          <div className="flex flex-wrap items-center justify-between gap-3 p-5">
+            <div className="flex items-center gap-3">
+              <span className="grid size-10 place-items-center rounded-lg bg-[var(--accent-soft)] text-accent">
+                <Megaphone className="size-5" />
+              </span>
+              <div>
+                <p className="text-sm font-medium text-primary">Sales from MMPPV</p>
+                <p className="text-xs text-muted">
+                  {mmppvDecimals.length
+                    ? `Sales ending in ${mmppvDecimals.map((c) => `.${String(c).padStart(2, "0")}`).join(", ")}`
+                    : "No MMPPV decimals set"}
+                  {" · "}
+                  <Link href="/settings" className="text-accent hover:underline">
+                    configure
+                  </Link>
+                </p>
+              </div>
+            </div>
+            <div className="text-right">
+              <p className="text-2xl font-semibold tabular text-primary">{formatCurrency(mmppvSales)}</p>
+              <p className="text-xs text-muted">{mmppvShare.toFixed(1)}% of transaction sales</p>
+            </div>
+          </div>
+        </Card>
+      )}
 
       {modelTxns.length > 0 && (
         <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">

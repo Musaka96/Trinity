@@ -2,6 +2,46 @@ import { SHIFTS, ShiftId, Transaction } from "./types";
 
 /** Pure selectors over Transaction[] — the fan/spender dimension. */
 
+// ---- MMPPV / decimal classification -------------------------------------
+
+/** The cents portion of an amount, 0–99, robust to float error. */
+export function centsOf(amount: number): number {
+  return Math.round((amount - Math.trunc(amount)) * 100);
+}
+
+/** A sale is MMPPV when its cents match one of the configured decimals. */
+export function isMMPPV(t: Transaction, decimals: number[] | Set<number>): boolean {
+  const set = decimals instanceof Set ? decimals : new Set(decimals);
+  return set.has(centsOf(t.earnings));
+}
+
+/** Split into chatter-attributable vs MMPPV (excluded) by the decimals. */
+export function partitionMMPPV(txns: Transaction[], decimals: number[]) {
+  if (!decimals.length) return { attributable: txns, mmppv: [] as Transaction[] };
+  const set = new Set(decimals);
+  const attributable: Transaction[] = [];
+  const mmppv: Transaction[] = [];
+  for (const t of txns) (set.has(centsOf(t.earnings)) ? mmppv : attributable).push(t);
+  return { attributable, mmppv };
+}
+
+/** Every cents value present in the data, ranked by total — powers the picker. */
+export function decimalDistribution(txns: Transaction[]) {
+  const map = new Map<number, { total: number; count: number }>();
+  for (const t of txns) {
+    const c = centsOf(t.earnings);
+    const cur = map.get(c) ?? { total: 0, count: 0 };
+    cur.total += t.earnings;
+    cur.count += 1;
+    map.set(c, cur);
+  }
+  return Array.from(map.entries())
+    .map(([cents, v]) => ({ cents, ...v }))
+    .sort((a, b) => b.total - a.total);
+}
+
+export const fmtCents = (c: number) => `.${String(c).padStart(2, "0")}`;
+
 export interface SpenderRow {
   fanId: string;
   fanName: string;

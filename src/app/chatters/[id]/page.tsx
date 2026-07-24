@@ -18,7 +18,7 @@ import { TierBadge } from "@/components/tier-badge";
 import { SkillAssessment } from "@/components/skill-assessment";
 import { ChatterStatsDetail } from "@/components/chatter-stats-detail";
 import { useData } from "@/lib/store";
-import { spendByShift, topSpenders, txnsForChatter } from "@/lib/transactions";
+import { partitionMMPPV, spendByShift, topSpenders, txnsForChatter } from "@/lib/transactions";
 import { bucketByTier, sortTiers, tierFor } from "@/lib/tiers";
 import { formatCurrency } from "@/lib/utils";
 import {
@@ -37,7 +37,7 @@ import { EVENT_META, eventDates, eventsForChatter } from "@/lib/events";
 export default function ChatterDetailPage() {
   const params = useParams();
   const id = decodeURIComponent(String(params.id));
-  const { rowsInRange, chatters, models, events, transactionsInRange, spendTiers } = useData();
+  const { rowsInRange, chatters, models, events, transactionsInRange, spendTiers, mmppvDecimals } = useData();
 
   const chatter = chatters.find((c) => c.id === id);
   const recs = rowsForChatter(rowsInRange, id);
@@ -54,9 +54,13 @@ export default function ChatterDetailPage() {
     dmsSent: 0,
   }));
 
-  // Transaction-level view: who this chatter actually closes.
+  // Transaction-level view: who this chatter actually closes. MMPPV sales
+  // (flagged by their decimals) are automated blasts, so they don't count
+  // toward the chatter's attributable revenue.
   const tiers = sortTiers(spendTiers);
-  const chatterTxns = txnsForChatter(transactionsInRange, id);
+  const allChatterTxns = txnsForChatter(transactionsInRange, id);
+  const { attributable: chatterTxns, mmppv: chatterMmppv } = partitionMMPPV(allChatterTxns, mmppvDecimals);
+  const mmppvExcluded = chatterMmppv.reduce((a, t) => a + t.earnings, 0);
   const allSpenders = topSpenders(chatterTxns);
   const spenderBuckets = bucketByTier(allSpenders, tiers);
   const topSpenderRows = allSpenders.slice(0, 10).map((s) => ({
@@ -147,20 +151,23 @@ export default function ChatterDetailPage() {
         <SkillAssessment chatterId={id} chatterName={chatter.name} />
       </div>
 
-      {chatterTxns.length > 0 && (
+      {allChatterTxns.length > 0 && (
         <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
           <Card>
             <CardHeader>
               <div>
                 <CardTitle>Top spenders closed</CardTitle>
-                <CardDescription>Fans {chatter.name} earned the most from</CardDescription>
+                <CardDescription>
+                  Fans {chatter.name} earned the most from
+                  {mmppvExcluded > 0 ? ` · ${formatCurrency(mmppvExcluded)} MMPPV excluded` : ""}
+                </CardDescription>
               </div>
               <Link href="/fans" className="text-xs font-medium text-accent hover:underline">
                 All fans →
               </Link>
             </CardHeader>
             <div className="p-3">
-              <RankedList rows={topSpenderRows} hrefBase="/fans" />
+              <RankedList rows={topSpenderRows} hrefBase="/fans" emptyLabel="All sales here were MMPPV." />
             </div>
           </Card>
 

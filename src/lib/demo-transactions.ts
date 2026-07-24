@@ -47,18 +47,34 @@ function weightedIndex(rng: () => number, n: number, skew = 1.7): number {
 
 type Tier = "whale" | "mid" | "small";
 
+/**
+ * Sale "product types" are encoded in the cents, mirroring how agencies tag
+ * sales in infloww: e.g. .09 = mass-message PPV (MMPPV), .04 = custom.
+ */
+const SALE_TYPES = [
+  { cents: 9, weight: 0.3 }, // MMPPV (mass message PPV)
+  { cents: 4, weight: 0.12 }, // custom
+  { cents: 0, weight: 0.4 }, // standard PPV / tip
+  { cents: -1, weight: 0.18 }, // misc — random cents
+] as const;
+
+function saleCents(rng: () => number): number {
+  let r = rng();
+  for (const s of SALE_TYPES) {
+    if (r < s.weight) return s.cents === -1 ? Math.floor(rng() * 100) : s.cents;
+    r -= s.weight;
+  }
+  return 0;
+}
+
+function baseDollars(rng: () => number, tier: Tier): number {
+  if (tier === "whale") return [99, 149, 198, 199, 249, 299][Math.floor(rng() * 6)];
+  if (tier === "mid") return [11, 15, 20, 25, 30, 45, 60][Math.floor(rng() * 7)];
+  return [3, 5, 6, 8, 10, 12][Math.floor(rng() * 6)];
+}
+
 function amountFor(rng: () => number, tier: Tier): number {
-  const cents = () => Math.round(rng() * 12) / 100;
-  if (tier === "whale") {
-    const base = [99, 149, 198, 199, 249, 299][Math.floor(rng() * 6)];
-    return +(base + cents()).toFixed(2);
-  }
-  if (tier === "mid") {
-    const base = [11, 15, 20, 25, 30, 45, 60][Math.floor(rng() * 7)];
-    return +(base + cents()).toFixed(2);
-  }
-  const base = [3, 5, 6, 8, 10, 12][Math.floor(rng() * 6)];
-  return +(base + cents()).toFixed(2);
+  return +(baseDollars(rng, tier) + saleCents(rng) / 100).toFixed(2);
 }
 
 /** Evening/night weighted, like real chatting traffic. */

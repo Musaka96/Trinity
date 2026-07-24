@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { TierBadge } from "@/components/tier-badge";
+import { MmppvSettings } from "@/components/mmppv-settings";
 import { useData } from "@/lib/store";
 import { topSpenders } from "@/lib/transactions";
 import {
@@ -224,6 +225,10 @@ export default function SettingsPage() {
             })}
           </CardContent>
         </Card>
+      </div>
+
+      <div className="mt-4">
+        <MmppvSettings />
       </div>
     </div>
   );

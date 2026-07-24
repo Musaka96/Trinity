@@ -16,6 +16,7 @@ export const EVENTS_KEY = "trinity.events.v1";
 export const TXNS_KEY = "trinity.transactions.v1";
 export const TIERS_KEY = "trinity.tiers.v1";
 export const RATINGS_KEY = "trinity.ratings.v1";
+export const MMPPV_KEY = "trinity.mmppv.v1";
 
 export function load<T>(key: string, fallback: T): T {
   if (typeof window === "undefined") return fallback;

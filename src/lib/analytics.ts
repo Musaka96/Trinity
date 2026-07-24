@@ -59,6 +59,40 @@ export function changePct(current: number, previous: number): number {
   return ((current - previous) / previous) * 100;
 }
 
+export interface EventImpact {
+  duringTotal: number;
+  duringDays: number;
+  duringAvg: number;
+  baselineDaily: number;
+  expected: number;
+  deltaPct: number;
+  hasBaseline: boolean;
+}
+
+/**
+ * How much an entity's sales moved during an event window vs its normal days.
+ * Baseline = mean daily sales outside the window; expected = baseline × event
+ * days; delta compares the actual during-total to that expectation.
+ */
+export function eventImpact(daily: { date: string; net: number }[], from: string, to: string): EventImpact {
+  const during = daily.filter((d) => d.date >= from && d.date <= to);
+  const outside = daily.filter((d) => d.date < from || d.date > to);
+  const duringTotal = during.reduce((a, d) => a + d.net, 0);
+  const duringDays = Math.max(during.length, 1);
+  const baselineDaily = outside.length ? outside.reduce((a, d) => a + d.net, 0) / outside.length : 0;
+  const expected = baselineDaily * duringDays;
+  const deltaPct = expected > 0 ? ((duringTotal - expected) / expected) * 100 : duringTotal > 0 ? 100 : 0;
+  return {
+    duringTotal,
+    duringDays: during.length,
+    duringAvg: during.length ? duringTotal / during.length : 0,
+    baselineDaily,
+    expected,
+    deltaPct,
+    hasBaseline: outside.length > 0,
+  };
+}
+
 // ---- Time series ----------------------------------------------------------
 
 export function availableDates(rows: StatRow[]): string[] {

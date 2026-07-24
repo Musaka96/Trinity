@@ -4,9 +4,10 @@ import { SHIFTS, ShiftId, Transaction } from "./types";
 
 // ---- MMPPV / decimal classification -------------------------------------
 
-/** The cents portion of an amount, 0–99, robust to float error. */
+/** The cents portion of an amount, 0–99, robust to float error and sign. */
 export function centsOf(amount: number): number {
-  return Math.round((amount - Math.trunc(amount)) * 100);
+  const a = Math.abs(amount);
+  return Math.round((a - Math.trunc(a)) * 100);
 }
 
 /** A sale is MMPPV when its cents match one of the configured decimals. */

@@ -11,12 +11,12 @@ import { Badge } from "@/components/ui/badge";
 import { RevenueChart } from "@/components/charts/revenue-chart";
 import { ShiftChart } from "@/components/charts/shift-chart";
 import { Leaderboard } from "@/components/leaderboard";
-import { EventList } from "@/components/events-ui";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { RankedList } from "@/components/ranked-list";
 import { TierBadge } from "@/components/tier-badge";
 import { SkillAssessment } from "@/components/skill-assessment";
 import { ChatterStatsDetail } from "@/components/chatter-stats-detail";
+import { ChatterEventImpact } from "@/components/chatter-event-impact";
 import { useData } from "@/lib/store";
 import { partitionMMPPV, spendByShift, topSpenders, txnsForChatter } from "@/lib/transactions";
 import { bucketByTier, sortTiers, tierFor } from "@/lib/tiers";
@@ -37,10 +37,13 @@ import { EVENT_META, eventDates, eventsForChatter } from "@/lib/events";
 export default function ChatterDetailPage() {
   const params = useParams();
   const id = decodeURIComponent(String(params.id));
-  const { rowsInRange, chatters, models, events, transactionsInRange, spendTiers, mmppvDecimals } = useData();
+  const { dataset, rowsInRange, chatters, models, events, transactionsInRange, spendTiers, mmppvDecimals } =
+    useData();
 
   const chatter = chatters.find((c) => c.id === id);
   const recs = rowsForChatter(rowsInRange, id);
+  // Event impact compares across the whole dataset, not the picker's window.
+  const chatterDailyAll = salesByDay(rowsForChatter(dataset.rows, id));
   const t = sumTotals(recs);
 
   const breakdown = chatterModelBreakdown(rowsInRange, id, models);
@@ -226,14 +229,17 @@ export default function ChatterDetailPage() {
         <Card>
           <CardHeader>
             <div>
-              <CardTitle>Events & context</CardTitle>
-              <CardDescription>Affecting this chatter</CardDescription>
+              <CardTitle>Events & impact</CardTitle>
+              <CardDescription>Sales during each event vs {chatter.name}&apos;s normal day</CardDescription>
             </div>
+            <Link href="/events" className="text-xs font-medium text-accent hover:underline">
+              Manage →
+            </Link>
           </CardHeader>
           <div className="p-3">
-            <EventList
+            <ChatterEventImpact
               events={chatterEvents}
-              emptyLabel="No events affecting this chatter."
+              daily={chatterDailyAll}
               scopeName={(ev) => (ev.modelId ? models.find((m) => m.id === ev.modelId)?.name ?? ev.modelId : "All models")}
             />
           </div>

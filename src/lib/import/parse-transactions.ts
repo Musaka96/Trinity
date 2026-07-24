@@ -3,33 +3,30 @@ import { ShiftId, Transaction, shiftFromRange } from "@/lib/types";
 import { cleanCreator } from "./parse-infloww";
 
 /**
- * Parser for the transaction-level infloww report:
- *   Date & time · Employee · Creator · Fan · Earnings
+ * Parser for the transaction-level infloww report ("Sales record"):
+ *   Date & time · Employee · Email · Creator · Fan · Fan ID · Earnings ·
+ *   Gross revenue · Net revenue · Type · Rule · Assigned by · Status
  * One row per fan payment. Returns null when the sheet isn't this report.
  */
 
-const ALIASES: Record<string, string> = {
-  "date & time": "datetime",
-  "date and time": "datetime",
-  "date/time": "datetime",
-  date: "datetime",
-  datetime: "datetime",
-  employee: "employee",
-  employees: "employee",
-  chatter: "employee",
-  email: "email",
-  group: "group",
-  creator: "creator",
-  creators: "creator",
-  model: "creator",
-  fan: "fan",
-  fans: "fan",
-  "fan name": "fan",
-  earnings: "earnings",
-  earning: "earnings",
-  amount: "earnings",
-  total: "earnings",
-};
+/** Tolerant column matcher — headers vary ("Date & time Europe/Belgrade" etc). */
+function matchColumn(raw: unknown): string | null {
+  const h = String(raw ?? "").trim().toLowerCase();
+  if (!h) return null;
+  if (h.startsWith("date")) return "datetime"; // "date & time …", "date/time …", "date"
+  if (h === "employee" || h === "employees" || h === "chatter") return "employee";
+  if (h === "email") return "email";
+  if (h === "group") return "group";
+  if (h.startsWith("creator") || h === "model") return "creator";
+  if (h === "fan id" || h === "fanid" || h === "fan_id") return "fanId";
+  if (h === "fan" || h === "fans" || h === "fan name") return "fan";
+  if (h === "earnings" || h === "earning" || h === "amount") return "earnings";
+  if (h === "gross revenue" || h === "gross") return "gross";
+  if (h === "net revenue" || h === "net") return "net";
+  if (h === "type") return "type";
+  if (h === "status") return "status";
+  return null;
+}
 
 const MONTHS: Record<string, number> = {
   jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5,
@@ -44,13 +41,13 @@ function pad(n: number) {
 export function parseDateTime(v: unknown): { datetime: string; date: string; hour: number } | null {
   if (v == null || v === "") return null;
 
-  const build = (y: number, mo: number, d: number, h: number, mi: number) => {
+  const build = (y: number, mo: number, d: number, h: number, mi: number, se = 0) => {
     const date = `${y}-${pad(mo + 1)}-${pad(d)}`;
-    return { datetime: `${date}T${pad(h)}:${pad(mi)}:00Z`, date, hour: h };
+    return { datetime: `${date}T${pad(h)}:${pad(mi)}:${pad(se)}Z`, date, hour: h };
   };
 
   if (v instanceof Date && !isNaN(v.getTime())) {
-    return build(v.getFullYear(), v.getMonth(), v.getDate(), v.getHours(), v.getMinutes());
+    return build(v.getFullYear(), v.getMonth(), v.getDate(), v.getHours(), v.getMinutes(), v.getSeconds());
   }
 
   if (typeof v === "number" && isFinite(v)) {
@@ -58,7 +55,7 @@ export function parseDateTime(v: unknown): { datetime: string; date: string; hou
     const ms = Math.round((v - 25569) * 86400 * 1000);
     const d = new Date(ms);
     if (isNaN(d.getTime())) return null;
-    return build(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), d.getUTCHours(), d.getUTCMinutes());
+    return build(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), d.getUTCHours(), d.getUTCMinutes(), d.getUTCSeconds());
   }
 
   const s = String(v).trim();
@@ -73,10 +70,10 @@ export function parseDateTime(v: unknown): { datetime: string; date: string; hou
     return build(parseInt(us[3], 10), mo, parseInt(us[2], 10), h, parseInt(us[5], 10));
   }
 
-  // "2026-07-23 23:59[:00]" or ISO "2026-07-23T23:59"
-  const iso = s.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{1,2}):(\d{2})/);
+  // "2026-07-23 23:59[:59]" or ISO "2026-07-23T23:59[:59]"
+  const iso = s.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{1,2}):(\d{2})(?::(\d{2}))?/);
   if (iso) {
-    return build(+iso[1], +iso[2] - 1, +iso[3], +iso[4], +iso[5]);
+    return build(+iso[1], +iso[2] - 1, +iso[3], +iso[4], +iso[5], iso[6] ? +iso[6] : 0);
   }
 
   // Date only
@@ -87,7 +84,7 @@ export function parseDateTime(v: unknown): { datetime: string; date: string; hou
   if (!isNaN(parsed.getTime())) {
     return build(
       parsed.getFullYear(), parsed.getMonth(), parsed.getDate(),
-      parsed.getHours(), parsed.getMinutes(),
+      parsed.getHours(), parsed.getMinutes(), parsed.getSeconds(),
     );
   }
   return null;
@@ -109,7 +106,7 @@ const firstLine = (s: string) => String(s).split(/\r?\n/)[0].trim();
 function headerMap(header: unknown[]): Record<string, number> {
   const map: Record<string, number> = {};
   header.forEach((h, i) => {
-    const key = ALIASES[String(h ?? "").trim().toLowerCase()];
+    const key = matchColumn(h);
     if (key && map[key] === undefined) map[key] = i;
   });
   return map;
@@ -132,13 +129,15 @@ export function parseTransactionsFromWorkbook(wb: XLSX.WorkBook): TransactionPar
     });
     if (rows.length < 2) continue;
     const hm = headerMap(rows[0] ?? []);
-    // The distinguishing columns: a Fan and an Earnings amount.
-    if (hm.fan === undefined || hm.earnings === undefined || hm.datetime === undefined) continue;
+    const earnCol = hm.earnings ?? hm.gross; // prefer Earnings, else Gross revenue
+    // The distinguishing columns: a Fan and an earnings amount.
+    if (hm.fan === undefined || earnCol === undefined || hm.datetime === undefined) continue;
 
     const warnings: string[] = [];
     const out: Transaction[] = [];
     const seen = new Set<string>();
     let skipped = 0;
+    let reversed = 0;
 
     for (const r of rows.slice(1)) {
       const when = parseDateTime(r[hm.datetime]);
@@ -154,9 +153,21 @@ export function parseTransactionsFromWorkbook(wb: XLSX.WorkBook): TransactionPar
       const email = hm.email !== undefined ? String(r[hm.email] ?? "").trim().toLowerCase() : "";
       const creatorCell = creatorRaw != null ? firstLine(String(creatorRaw)) : "";
       const { name: creator, platform, tier } = cleanCreator(creatorCell || "Unknown");
-      const earnings = money(r[hm.earnings]);
-      const chatterId = email || slug(chatterName) || "unknown";
-      const fanId = `fan_${slug(fanName)}`;
+
+      // A reversal (chargeback) removes revenue — count it as negative.
+      const status = hm.status !== undefined ? String(r[hm.status] ?? "").trim().toLowerCase() : "";
+      const sign = status === "reverse" ? -1 : 1;
+      if (sign < 0) reversed++;
+      const earnings = +(money(r[earnCol]) * sign).toFixed(2);
+
+      // Prefer the stable Fan ID; the display name can be a note or repeat.
+      const rawFanId = hm.fanId !== undefined ? String(r[hm.fanId] ?? "").trim() : "";
+      const fanId = rawFanId ? `fan_${rawFanId}` : `fan_${slug(fanName)}`;
+
+      // Subscriptions/tips often have no employee — bucket under "Unassigned".
+      const attributed = email || slug(chatterName);
+      const chatterId = attributed || "unassigned";
+      const displayName = chatterName || (attributed ? "Unknown" : "Unassigned");
       const shift: ShiftId = shiftFromRange(when.hour, false);
 
       // Stable key so re-importing the same export updates rather than duplicates.
@@ -174,7 +185,7 @@ export function parseTransactionsFromWorkbook(wb: XLSX.WorkBook): TransactionPar
         date: when.date,
         shift,
         chatterId,
-        chatterName: chatterName || "Unknown",
+        chatterName: displayName,
         group: hm.group !== undefined ? firstLine(String(r[hm.group] ?? "")) : "",
         creator,
         platform,
@@ -187,6 +198,7 @@ export function parseTransactionsFromWorkbook(wb: XLSX.WorkBook): TransactionPar
 
     if (out.length === 0) continue;
     if (skipped) warnings.push(`${skipped} row(s) skipped (unparsable date or missing fan).`);
+    if (reversed) warnings.push(`${reversed} reversal(s) counted as negative.`);
     out.sort((a, b) => b.datetime.localeCompare(a.datetime));
     return { transactions: out, sheetUsed: name, warnings };
   }

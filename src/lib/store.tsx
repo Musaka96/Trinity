@@ -82,6 +82,21 @@ interface StoreValue {
 
 const StoreContext = React.createContext<StoreValue | null>(null);
 
+/** Defensive: a settings value may arrive as a JSON string; parse it if so. */
+function coerceValue(value: unknown): unknown {
+  let v = value;
+  for (let i = 0; i < 3 && typeof v === "string"; i++) {
+    const s = v.trim();
+    if (s[0] !== "{" && s[0] !== "[") break;
+    try {
+      v = JSON.parse(s);
+    } catch {
+      break;
+    }
+  }
+  return v;
+}
+
 function newEvent(ev: Omit<TrinityEvent, "id" | "createdAt">): TrinityEvent {
   return {
     ...ev,
@@ -204,7 +219,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   // ---- Spend tiers --------------------------------------------------------
   const spendTiers = React.useMemo<SpendTier[]>(() => {
     if (isServer) {
-      const fromServer = server.settings?.[TIERS_SETTING];
+      const fromServer = coerceValue(server.settings?.[TIERS_SETTING]);
       return Array.isArray(fromServer) && fromServer.length ? (fromServer as SpendTier[]) : DEFAULT_TIERS;
     }
     return localTiers.length ? localTiers : DEFAULT_TIERS;
@@ -216,7 +231,10 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     const raw: Record<string, ChatterRating> = {};
     if (isServer) {
       for (const [key, value] of Object.entries(server.settings ?? {})) {
-        if (isRatingKey(key) && value) raw[chatterIdFromRatingKey(key)] = value as ChatterRating;
+        const parsed = coerceValue(value);
+        if (isRatingKey(key) && parsed && typeof parsed === "object") {
+          raw[chatterIdFromRatingKey(key)] = parsed as ChatterRating;
+        }
       }
     } else {
       Object.assign(raw, localRatings);

@@ -161,6 +161,25 @@ async function insertRows(rows: StatRow[]) {
   }
 }
 
+/**
+ * jsonb columns round-trip as a JSON *string* through this driver, so a stored
+ * object comes back as text. Parse it (recursively, in case of double-encoding)
+ * back into an object; pass through anything already parsed.
+ */
+function coerceJson(value: unknown): unknown {
+  let v = value;
+  for (let i = 0; i < 3 && typeof v === "string"; i++) {
+    const s = v.trim();
+    if (s[0] !== "{" && s[0] !== "[") break;
+    try {
+      v = JSON.parse(s);
+    } catch {
+      break;
+    }
+  }
+  return v;
+}
+
 export async function getDataset(): Promise<{
   rows: StatRow[];
   events: TrinityEvent[];
@@ -176,7 +195,7 @@ export async function getDataset(): Promise<{
     sql`SELECT key, value FROM settings`,
   ]);
   const settings: Record<string, unknown> = {};
-  for (const s of settingsRows) settings[s.key] = s.value;
+  for (const s of settingsRows) settings[s.key] = coerceJson(s.value);
   return {
     rows: rows.map(fromDb),
     events: events.map(eventFromDb),

@@ -60,13 +60,20 @@ export default function SettingsPage() {
     ]);
   };
 
+  const [error, setError] = React.useState<string | null>(null);
+
   const save = async () => {
+    setError(null);
     const cleaned = draft
       .map((t) => ({ ...t, label: t.label.trim() || "Untitled", minTotal: Math.max(0, Number(t.minTotal) || 0) }))
       .filter((t, i, arr) => arr.findIndex((x) => x.id === t.id) === i);
-    await setSpendTiers(sortTiers(cleaned));
-    dirtyRef.current = false;
-    setSaved(true);
+    const ok = await setSpendTiers(sortTiers(cleaned));
+    if (ok) {
+      dirtyRef.current = false;
+      setSaved(true);
+    } else {
+      setError("Couldn't save to the database. Your changes are still here — try again.");
+    }
   };
 
   const resetDefaults = async () => {
@@ -180,6 +187,7 @@ export default function SettingsPage() {
               </Button>
               <Button onClick={save}>Save changes</Button>
               {saved && <span className="self-center text-xs text-good">Saved</span>}
+              {error && <span className="self-center text-xs text-critical">{error}</span>}
             </div>
           </CardContent>
         </Card>

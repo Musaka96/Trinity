@@ -64,11 +64,13 @@ interface StoreValue {
 
   /** User-configurable spend tiers used to tag fans. */
   spendTiers: SpendTier[];
-  setSpendTiers: (tiers: SpendTier[]) => Promise<void>;
+  /** Resolves false when the write could not be persisted. */
+  setSpendTiers: (tiers: SpendTier[]) => Promise<boolean>;
 
   /** Manual skill assessments, keyed by chatter id. */
   ratings: Record<string, ChatterRating>;
-  setRating: (rating: ChatterRating) => Promise<void>;
+  /** Resolves false when the write could not be persisted. */
+  setRating: (rating: ChatterRating) => Promise<boolean>;
 
   importRows: (rows: StatRow[]) => Promise<{ added: number; updated: number; dates: string[] }>;
   resetImports: () => Promise<void>;
@@ -107,13 +109,20 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const [localTiers, setLocalTiers] = React.useState<SpendTier[]>(DEFAULT_TIERS);
   const [localRatings, setLocalRatings] = React.useState<Record<string, ChatterRating>>({});
 
-  React.useEffect(() => {
-    let cancelled = false;
-    (async () => {
+  /**
+   * Mode has to be settled before any write, otherwise a save fired while the
+   * initial fetch is still in flight would land in localStorage and then be
+   * invisible once we switch to the shared database. Writers await this.
+   */
+  const initRef = React.useRef<Promise<boolean> | null>(null);
+  const modeRef = React.useRef<StorageMode>("loading");
+
+  if (initRef.current === null && typeof window !== "undefined") {
+    initRef.current = (async () => {
       const data = await fetchServerData();
-      if (cancelled) return;
       if (data) {
         setServer(data);
+        modeRef.current = "server";
         setMode("server");
       } else {
         setImports(load<Dataset>(IMPORTS_KEY, emptyDataset()));
@@ -121,13 +130,18 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         setLocalTxns(load<Transaction[]>(TXNS_KEY, []));
         setLocalTiers(load<SpendTier[]>(TIERS_KEY, DEFAULT_TIERS));
         setLocalRatings(load<Record<string, ChatterRating>>(RATINGS_KEY, {}));
+        modeRef.current = "local";
         setMode("local");
       }
       setReady(true);
+      return modeRef.current === "server";
     })();
-    return () => {
-      cancelled = true;
-    };
+  }
+
+  /** Resolves to true when the shared database is the active target. */
+  const resolveServerMode = React.useCallback(async () => {
+    if (modeRef.current !== "loading") return modeRef.current === "server";
+    return (await initRef.current) ?? false;
   }, []);
 
   const isServer = mode === "server";
@@ -258,34 +272,45 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const setSpendTiers = React.useCallback(
     async (tiers: SpendTier[]) => {
-      if (isServer) {
-        setServer((s) => ({ ...s, settings: { ...s.settings, [TIERS_SETTING]: tiers } }));
+      const useServer = await resolveServerMode();
+      if (useServer) {
         const okRes = await serverSaveSetting(TIERS_SETTING, tiers);
-        if (!okRes) await refetch();
-        return;
+        if (!okRes) {
+          await refetch();
+          return false;
+        }
+        setServer((s) => ({ ...s, settings: { ...s.settings, [TIERS_SETTING]: tiers } }));
+        return true;
       }
       setLocalTiers(tiers);
       save(TIERS_KEY, tiers);
+      return true;
     },
-    [isServer, refetch],
+    [resolveServerMode, refetch],
   );
 
   const setRating = React.useCallback(
     async (rating: ChatterRating) => {
       const next = { ...rating, updatedAt: new Date().toISOString() };
-      if (isServer) {
-        setServer((s) => ({ ...s, settings: { ...s.settings, [ratingKey(next.chatterId)]: next } }));
+      const useServer = await resolveServerMode();
+      if (useServer) {
         const okRes = await serverSaveSetting(ratingKey(next.chatterId), next);
-        if (!okRes) await refetch();
-        return;
+        if (!okRes) {
+          // Don't leave an optimistic value on screen that isn't stored.
+          await refetch();
+          return false;
+        }
+        setServer((s) => ({ ...s, settings: { ...s.settings, [ratingKey(next.chatterId)]: next } }));
+        return true;
       }
       setLocalRatings((prev) => {
         const merged = { ...prev, [next.chatterId]: next };
         save(RATINGS_KEY, merged);
         return merged;
       });
+      return true;
     },
-    [isServer, refetch],
+    [resolveServerMode, refetch],
   );
 
   const resetImports = React.useCallback(async () => {

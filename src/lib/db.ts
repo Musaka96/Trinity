@@ -185,6 +185,27 @@ export async function getDataset(): Promise<{
   };
 }
 
+/** What the database actually contains — used by /api/health to diagnose saves. */
+export async function healthReport() {
+  await ensureSchema();
+  const sql = getSql();
+  const [[stat], [txn], [evt], settingsRows] = await Promise.all([
+    sql`SELECT count(*)::int AS c FROM stat_rows`,
+    sql`SELECT count(*)::int AS c FROM transactions`,
+    sql`SELECT count(*)::int AS c FROM events`,
+    sql`SELECT key FROM settings ORDER BY key`,
+  ]);
+  const keys = settingsRows.map((r) => r.key as string);
+  return {
+    statRows: stat.c,
+    transactions: txn.c,
+    events: evt.c,
+    settingsKeys: keys,
+    ratingsStored: keys.filter((k) => k.startsWith("rating:")).length,
+    hasSpendTiers: keys.includes("spend_tiers"),
+  };
+}
+
 export async function saveSetting(key: string, value: unknown): Promise<void> {
   await ensureSchema();
   const sql = getSql();

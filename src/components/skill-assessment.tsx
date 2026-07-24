@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Save } from "lucide-react";
+import { Save, TriangleAlert } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { StarRating, ScorePill } from "@/components/star-rating";
@@ -41,10 +41,24 @@ export function SkillAssessment({ chatterId, chatterName }: { chatterId: string;
     setDraft((d) => ({ ...d, chatterId, scores: { ...d.scores, [id]: v } }));
   };
 
+  const [saving, setSaving] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+
   const save = async () => {
-    await setRating({ ...draft, chatterId });
-    dirty.current = false;
-    setSaved(true);
+    setSaving(true);
+    setError(null);
+    try {
+      const ok = await setRating({ ...draft, chatterId });
+      if (ok) {
+        dirty.current = false;
+        setSaved(true);
+      } else {
+        // Keep the draft (and the dirty flag) so nothing is silently lost.
+        setError("Couldn't save to the database. Your changes are still here — try again.");
+      }
+    } finally {
+      setSaving(false);
+    }
   };
 
   const overall = overallScore(draft);
@@ -62,13 +76,19 @@ export function SkillAssessment({ chatterId, chatterName }: { chatterId: string;
           </div>
           <div className="flex items-center gap-3">
             {saved && <span className="text-xs text-good">Saved</span>}
-            <Button size="sm" onClick={save} disabled={!dirty.current}>
+            <Button size="sm" onClick={save} disabled={saving}>
               <Save className="size-4" />
-              Save
+              {saving ? "Saving…" : "Save"}
             </Button>
           </div>
         </CardHeader>
         <CardContent className="flex flex-col gap-5">
+          {error && (
+            <div className="flex items-start gap-2 rounded-lg border border-[var(--critical)] bg-[var(--critical-soft)] p-3">
+              <TriangleAlert className="mt-0.5 size-4 shrink-0 text-critical" />
+              <p className="text-xs text-secondary">{error}</p>
+            </div>
+          )}
           {RATING_GROUPS.map((group) => (
             <div key={group}>
               <div className="mb-2 flex items-center justify-between">

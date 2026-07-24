@@ -16,6 +16,7 @@ import { DateRangePicker } from "@/components/date-range-picker";
 import { RankedList } from "@/components/ranked-list";
 import { TierBadge } from "@/components/tier-badge";
 import { SkillAssessment } from "@/components/skill-assessment";
+import { ChatterStatsDetail } from "@/components/chatter-stats-detail";
 import { useData } from "@/lib/store";
 import { spendByShift, topSpenders, txnsForChatter } from "@/lib/transactions";
 import { bucketByTier, sortTiers, tierFor } from "@/lib/tiers";
@@ -230,6 +231,10 @@ export default function ChatterDetailPage() {
             />
           </div>
         </Card>
+      </div>
+
+      <div className="mt-4">
+        <ChatterStatsDetail rows={recs} />
       </div>
     </div>
   );

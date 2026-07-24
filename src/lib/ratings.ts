@@ -36,7 +36,16 @@ export interface ChatterRating {
   updatedAt: string;
 }
 
-export const RATING_MAX = 10;
+export const RATING_MAX = 5;
+
+/** Guards against values saved under an older scale by clamping into range. */
+export function normalizeRating(rating: ChatterRating): ChatterRating {
+  const scores: Record<string, number> = {};
+  for (const [k, v] of Object.entries(rating.scores ?? {})) {
+    if (typeof v === "number" && v > 0) scores[k] = Math.min(RATING_MAX, v);
+  }
+  return { ...rating, scores };
+}
 
 /** settings key used for per-chatter persistence (one row per chatter). */
 export const ratingKey = (chatterId: string) => `rating:${chatterId}`;
@@ -71,10 +80,10 @@ export function ratedCount(rating: ChatterRating | undefined): number {
   return RATING_CRITERIA.filter((c) => (rating.scores[c.id] ?? 0) > 0).length;
 }
 
-/** Colour for a score, matching the status palette. */
+/** Colour for a score on the 1–5 scale, matching the status palette. */
 export function scoreColor(score: number): string {
-  if (score >= 8) return "var(--good)";
-  if (score >= 6) return "var(--accent)";
-  if (score >= 4) return "var(--warning)";
+  if (score >= 4) return "var(--good)";
+  if (score >= 3) return "var(--accent)";
+  if (score >= 2) return "var(--warning)";
   return "var(--critical)";
 }

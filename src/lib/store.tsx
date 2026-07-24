@@ -7,7 +7,13 @@ import { deriveChatters, deriveModels, emptyDataset, importDiff, mergeDataset } 
 import { TrinityEvent } from "./events";
 import { generateDemoTransactions } from "./demo-transactions";
 import { DEFAULT_TIERS, SpendTier } from "./tiers";
-import { ChatterRating, chatterIdFromRatingKey, isRatingKey, ratingKey } from "./ratings";
+import {
+  ChatterRating,
+  chatterIdFromRatingKey,
+  isRatingKey,
+  normalizeRating,
+  ratingKey,
+} from "./ratings";
 import { EVENTS_KEY, IMPORTS_KEY, RATINGS_KEY, TIERS_KEY, TXNS_KEY, clear, load, save } from "./persistence";
 import {
   fetchServerData,
@@ -193,11 +199,16 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   // Ratings live as one settings row per chatter ("rating:<id>"), so two people
   // rating different chatters never overwrite each other.
   const ratings = React.useMemo<Record<string, ChatterRating>>(() => {
-    if (!isServer) return localRatings;
-    const out: Record<string, ChatterRating> = {};
-    for (const [key, value] of Object.entries(server.settings ?? {})) {
-      if (isRatingKey(key) && value) out[chatterIdFromRatingKey(key)] = value as ChatterRating;
+    const raw: Record<string, ChatterRating> = {};
+    if (isServer) {
+      for (const [key, value] of Object.entries(server.settings ?? {})) {
+        if (isRatingKey(key) && value) raw[chatterIdFromRatingKey(key)] = value as ChatterRating;
+      }
+    } else {
+      Object.assign(raw, localRatings);
     }
+    const out: Record<string, ChatterRating> = {};
+    for (const [id, r] of Object.entries(raw)) out[id] = normalizeRating(r);
     return out;
   }, [isServer, server.settings, localRatings]);
 

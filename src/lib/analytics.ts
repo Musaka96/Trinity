@@ -49,6 +49,10 @@ export function sumTotals(rows: StatRow[]): Totals {
 export const unlockRate = (t: Totals) => (t.ppvsSent ? (t.ppvsUnlocked / t.ppvsSent) * 100 : 0);
 export const fanCVR = (t: Totals) => (t.fansChatted ? (t.fansWhoSpent / t.fansChatted) * 100 : 0);
 export const avgPerFan = (t: Totals) => (t.fansWhoSpent ? t.sales / t.fansWhoSpent : 0);
+/** infloww's "Golden ratio": PPVs sent per message sent. */
+export const goldenRatio = (t: Totals) => (t.dmsSent ? (t.ppvsSent / t.dmsSent) * 100 : 0);
+export const avgCharsPerMessage = (t: Totals) => (t.dmsSent ? t.charCount / t.dmsSent : 0);
+export const avgPerUnlock = (t: Totals) => (t.ppvsUnlocked ? t.ppvSales / t.ppvsUnlocked : 0);
 
 export function changePct(current: number, previous: number): number {
   if (previous === 0) return current === 0 ? 0 : 100;

@@ -53,7 +53,7 @@ export function SkillRadar({ rating }: { rating: ChatterRating | undefined }) {
                   value: p.value as number,
                   color: "var(--accent)",
                 }))}
-                formatValue={(n) => (n > 0 ? `${n.toFixed(1)} / 10` : "Not rated")}
+                formatValue={(n) => (n > 0 ? `${n.toFixed(1)} / ${RATING_MAX}` : "Not rated")}
               />
             )}
           />

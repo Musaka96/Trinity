@@ -11,6 +11,7 @@ import {
   ChatterRating,
   RATING_CRITERIA,
   RATING_GROUPS,
+  RATING_MAX,
   emptyRating,
   groupScore,
   overallScore,
@@ -131,7 +132,7 @@ export function SkillAssessment({ chatterId, chatterName }: { chatterId: string;
             <span className="text-4xl font-semibold tracking-tight tabular" style={{ color: overall ? scoreColor(overall) : "var(--text-muted)" }}>
               {overall !== null ? overall.toFixed(1) : "—"}
             </span>
-            <span className="text-xs text-muted">overall out of 10</span>
+            <span className="text-xs text-muted">overall out of {RATING_MAX}</span>
             <div className="mt-2">
               <ScorePill score={overall} color={overall ? scoreColor(overall) : undefined} />
             </div>

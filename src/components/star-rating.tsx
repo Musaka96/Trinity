@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { cn } from "@/lib/utils";
+import { RATING_MAX } from "@/lib/ratings";
 
 const STAR_PATH =
   "M12 2.4l2.85 6.03 6.55.79-4.84 4.53 1.29 6.5L12 17.1l-5.85 3.15 1.29-6.5L2.6 9.22l6.55-.79z";
@@ -25,7 +26,7 @@ function Star({ fill, size, color }: { fill: number; size: number; color: string
 export function StarRating({
   value,
   onChange,
-  max = 10,
+  max = RATING_MAX,
   size = 18,
   color = "var(--warning)",
   showValue = true,
@@ -101,7 +102,7 @@ export function ScorePill({ score, color }: { score: number | null; color?: stri
     <span className="inline-flex items-center gap-1.5">
       <Star fill={1} size={14} color={color ?? "var(--warning)"} />
       <span className="text-sm font-medium tabular text-primary">{score.toFixed(1)}</span>
-      <span className="text-xs text-muted">/10</span>
+      <span className="text-xs text-muted">/{RATING_MAX}</span>
     </span>
   );
 }
